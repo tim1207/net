@@ -1,10 +1,17 @@
-module golang.org/x/net
+module github.com/nycu-ucr/net
 
-go 1.11
+go 1.19
 
 require (
+	golang.org/x/net v0.0.0-20221002022538-bcab6841153b
+	golang.org/x/sys v0.0.0-20220928140112-f11e5e49a4ec
+	golang.org/x/text v0.3.7
+)
+
+require (
+	github.com/antonfisher/nested-logrus-formatter v1.3.1 // indirect
+	github.com/cornelk/hashmap v1.0.8 // indirect
 	github.com/nycu-ucr/onvmpoller v0.0.0-20220929124448-6a86f69361a1 // indirect
-	golang.org/x/sys v0.0.0-20220715151400-c0bba94af5f8
-	golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1
-	golang.org/x/text v0.3.3
+	github.com/sirupsen/logrus v1.9.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
