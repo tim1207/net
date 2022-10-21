@@ -437,7 +437,7 @@ type RoundTripOpt struct {
 }
 
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
-	// println("http2 RT")
+	// // println("http2 RT")
 	return t.RoundTripOpt(req, RoundTripOpt{})
 }
 
@@ -464,7 +464,7 @@ func authorityAddr(scheme string, authority string) (addr string) {
 
 // RoundTripOpt is like RoundTrip, but takes options.
 func (t *Transport) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Response, error) {
-	// println("http2 RTO")
+	// println("http2 RoundTripOpt")
 	if !(req.URL.Scheme == "https" || (req.URL.Scheme == "http" && t.AllowHTTP)) {
 		return nil, errors.New("http2: unsupported scheme")
 	}
@@ -479,6 +479,9 @@ func (t *Transport) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Res
 		reused := !atomic.CompareAndSwapUint32(&cc.reused, 0, 1)
 		traceGotConn(req, cc, reused)
 		res, gotErrAfterReqBodyWrite, err := cc.roundTrip(req)
+		if err != nil {
+			// println("http2 RoundTripOpt err: ", err.Error())
+		}
 		if err != nil && retry <= 6 {
 			if req, err = shouldRetryRequest(req, err, gotErrAfterReqBodyWrite); err == nil {
 				// After the first retry, do exponential backoff with 10% jitter.
@@ -568,13 +571,18 @@ func canRetryError(err error) bool {
 }
 
 func (t *Transport) dialClientConn(addr string, singleUse bool) (*ClientConn, error) {
-	// println("http2 dialClientConn") // Go Here
+	// // println("http2 dialClientConn") // Go Here
+	// host, _, err := net.SplitHostPort(addr)
 	_, _, err := net.SplitHostPort(addr)
 	if err != nil {
 		return nil, err
 	}
 	// tconn, err := t.dialTLS()("tcp", addr, t.newTLSConfig(host))
+	println("\u001b[33m You are using ONVM \u001b[0m, HTTP2 transport.go")
+	t1 := time.Now()
 	tconn, err := onvmpoller.DialONVM("onvm", addr)
+	t2 := time.Now()
+	fmt.Printf("\u001b[35mDial\u001b[0m operation time: %v\n", t2.Sub(t1).Seconds())
 	if err != nil {
 		return nil, err
 	}
@@ -701,7 +709,10 @@ func (t *Transport) newClientConn(c net.Conn, singleUse bool) (*ClientConn, erro
 	cc.fr.WriteSettings(initialSettings...)
 	cc.fr.WriteWindowUpdate(0, transportDefaultConnFlow)
 	cc.inflow.add(transportDefaultConnFlow + initialWindowSize)
+	t1 := time.Now()
 	cc.bw.Flush()
+	t2 := time.Now()
+	fmt.Printf("newClientConn, \u001b[34;1mWrite\u001b[0m: %v (second)\n", t2.Sub(t1).Seconds())
 	if cc.werr != nil {
 		cc.Close()
 		return nil, cc.werr
@@ -726,6 +737,7 @@ func (cc *ClientConn) healthCheck() {
 }
 
 func (cc *ClientConn) setGoAway(f *GoAwayFrame) {
+	// println("set go away")
 	cc.mu.Lock()
 	defer cc.mu.Unlock()
 
@@ -819,6 +831,7 @@ func (cc *ClientConn) onIdleTimeout() {
 }
 
 func (cc *ClientConn) closeIfIdle() {
+	// println("Close if idel")
 	cc.mu.Lock()
 	if len(cc.streams) > 0 {
 		cc.mu.Unlock()
@@ -888,9 +901,11 @@ func (cc *ClientConn) sendGoAway() error {
 	if err := cc.fr.WriteGoAway(maxStreamID, ErrCodeNo, nil); err != nil {
 		return err
 	}
+	println("Go Away")
 	if err := cc.bw.Flush(); err != nil {
 		return err
 	}
+	println("Go Away End")
 	// Prevent new requests
 	cc.closing = true
 	return nil
@@ -899,6 +914,7 @@ func (cc *ClientConn) sendGoAway() error {
 // closes the client connection immediately. In-flight requests are interrupted.
 // err is sent to streams.
 func (cc *ClientConn) closeForError(err error) error {
+	// println("closeForError")
 	cc.mu.Lock()
 	defer cc.cond.Broadcast()
 	defer cc.mu.Unlock()
@@ -1030,12 +1046,13 @@ func actualContentLength(req *http.Request) int64 {
 }
 
 func (cc *ClientConn) RoundTrip(req *http.Request) (*http.Response, error) {
-	println("http2 cc RTO")
+	// println("http2 cc RTO")
 	resp, _, err := cc.roundTrip(req)
 	return resp, err
 }
 
 func (cc *ClientConn) roundTrip(req *http.Request) (res *http.Response, gotErrAfterReqBodyWrite bool, err error) {
+	// println("http2 ClientConn round Trip")
 	if err := checkConnHeaders(req); err != nil {
 		return nil, false, err
 	}
@@ -1101,6 +1118,7 @@ func (cc *ClientConn) roundTrip(req *http.Request) (res *http.Response, gotErrAf
 		werr := cc.werr
 		cc.wmu.Unlock()
 		if werr != nil {
+			// println("werr: ", werr.Error(), " cc close")
 			cc.Close()
 		}
 	}()
@@ -1159,6 +1177,7 @@ func (cc *ClientConn) roundTrip(req *http.Request) (res *http.Response, gotErrAf
 			}
 		}
 		if re.err != nil {
+			// println("handleReadLoopResponse ", re.err.Error())
 			cc.forgetStreamID(cs.ID)
 			return nil, cs.getStartedWrite(), re.err
 		}
@@ -1167,11 +1186,14 @@ func (cc *ClientConn) roundTrip(req *http.Request) (res *http.Response, gotErrAf
 		return res, false, nil
 	}
 
+	// println("Here 1")
 	for {
 		select {
 		case re := <-readLoopResCh:
+			// println("Here 2")
 			return handleReadLoopResponse(re)
 		case <-respHeaderTimer:
+			// println("Here 3")
 			if !hasBody || bodyWritten {
 				cc.writeStreamReset(cs.ID, ErrCodeCancel, nil)
 			} else {
@@ -1182,6 +1204,7 @@ func (cc *ClientConn) roundTrip(req *http.Request) (res *http.Response, gotErrAf
 			cc.forgetStreamID(cs.ID)
 			return nil, cs.getStartedWrite(), errTimeout
 		case <-ctx.Done():
+			// println("Here 4")
 			if !hasBody || bodyWritten {
 				cc.writeStreamReset(cs.ID, ErrCodeCancel, nil)
 			} else {
@@ -1192,6 +1215,7 @@ func (cc *ClientConn) roundTrip(req *http.Request) (res *http.Response, gotErrAf
 			cc.forgetStreamID(cs.ID)
 			return nil, cs.getStartedWrite(), ctx.Err()
 		case <-req.Cancel:
+			// println("Here 5")
 			if !hasBody || bodyWritten {
 				cc.writeStreamReset(cs.ID, ErrCodeCancel, nil)
 			} else {
@@ -1202,6 +1226,7 @@ func (cc *ClientConn) roundTrip(req *http.Request) (res *http.Response, gotErrAf
 			cc.forgetStreamID(cs.ID)
 			return nil, cs.getStartedWrite(), errRequestCanceled
 		case <-cs.peerReset:
+			// println("Here 6")
 			// processResetStream already removed the
 			// stream from the streams map; no need for
 			// forgetStreamID.
@@ -1211,8 +1236,10 @@ func (cc *ClientConn) roundTrip(req *http.Request) (res *http.Response, gotErrAf
 			// Prefer the read loop's response, if available. Issue 16102.
 			select {
 			case re := <-readLoopResCh:
+				// println("Here 8")
 				return handleReadLoopResponse(re)
 			default:
+				// println("Here 9")
 			}
 			if err != nil {
 				cc.forgetStreamID(cs.ID)
@@ -1296,7 +1323,11 @@ func (cc *ClientConn) writeHeaders(streamID uint32, endStream bool, maxFrameSize
 	// could the WriteHeaders call(s) above), which means they
 	// wouldn't respond to Request.Cancel being readable. That's
 	// rare, but this should probably be in a goroutine.
+	t1 := time.Now()
 	cc.bw.Flush()
+	t2 := time.Now()
+	fmt.Printf("writeHeaders, \u001b[34;1mWrite\u001b[0m: %v (second)\n", t2.Sub(t1).Seconds())
+
 	return cc.werr
 }
 
@@ -1376,7 +1407,6 @@ func (cs *clientStream) writeRequestBody(body io.Reader, bodyCloser io.Closer) (
 				cc.writeStreamReset(cs.ID, ErrCodeCancel, nil)
 				return err
 			case err != nil:
-				return err
 			}
 			cc.wmu.Lock()
 			data := remain[:allowed]
@@ -1390,7 +1420,10 @@ func (cs *clientStream) writeRequestBody(body io.Reader, bodyCloser io.Closer) (
 				// timers?  Based on 'n'? Only last chunk of this for loop,
 				// unless flow control tokens are low? For now, always.
 				// If we change this, see comment below.
+				t1 := time.Now()
 				err = cc.bw.Flush()
+				t2 := time.Now()
+				fmt.Printf("writeRequestBody, \u001b[34;1mWrite\u001b[0m: %v (second)\n", t2.Sub(t1).Seconds())
 			}
 			cc.wmu.Unlock()
 		}
@@ -1432,6 +1465,7 @@ func (cs *clientStream) writeRequestBody(body io.Reader, bodyCloser io.Closer) (
 	} else {
 		err = cc.fr.WriteData(cs.ID, true, nil)
 	}
+	println("A")
 	if ferr := cc.bw.Flush(); ferr != nil && err == nil {
 		err = ferr
 	}
@@ -1748,6 +1782,7 @@ func (cc *ClientConn) readLoop() {
 	if ce, ok := cc.readerErr.(ConnectionError); ok {
 		cc.wmu.Lock()
 		cc.fr.WriteGoAway(0, ErrCode(ce), nil)
+		// println("WriteGoAway err: ", err.Error())
 		cc.wmu.Unlock()
 	}
 }
@@ -1774,6 +1809,7 @@ func isEOFOrNetReadError(err error) bool {
 }
 
 func (rl *clientConnReadLoop) cleanup() {
+	// println("cleanup")
 	cc := rl.cc
 	defer cc.tconn.Close()
 	defer cc.t.connPool().MarkDead(cc)
@@ -1823,6 +1859,10 @@ func (rl *clientConnReadLoop) run() error {
 	}
 	for {
 		f, err := cc.fr.ReadFrame()
+
+		if err != nil {
+			// println("clientConnReadLoop run err: ", err.Error())
+		}
 		if t != nil {
 			t.Reset(readIdleTimeout)
 		}
@@ -1856,25 +1896,48 @@ func (rl *clientConnReadLoop) run() error {
 
 		switch f := f.(type) {
 		case *MetaHeadersFrame:
+			// println("MetaHeadersFrame")
+			// t1 := time.Now()
 			err = rl.processHeaders(f)
+			// t2 := time.Now()
+			// fmt.Printf("\u001b[34;1mRead\u001b[0m MetaHeadersFrame: %v\n", t2.Sub(t1).Seconds())
 			maybeIdle = true
 			gotReply = true
 		case *DataFrame:
+			// println("DataFrame")
+			// t1 := time.Now()
 			err = rl.processData(f)
+			// t2 := time.Now()
+			// fmt.Printf("\u001b[34;1mRead\u001b[0m DataFrame: %v\n", t2.Sub(t1).Seconds())
 			maybeIdle = true
 		case *GoAwayFrame:
+			// println("GoAwayFrame")
+			// t1 := time.Now()
 			err = rl.processGoAway(f)
+			// t2 := time.Now()
+			// fmt.Printf("\u001b[34;1mRead\u001b[0m GoAwayFrame: %v\n", t2.Sub(t1).Seconds())
 			maybeIdle = true
 		case *RSTStreamFrame:
+			// println("RSTStreamFrame")
 			err = rl.processResetStream(f)
 			maybeIdle = true
 		case *SettingsFrame:
+			// println("SettingsFrame")
+			// t1 := time.Now()
 			err = rl.processSettings(f)
+			// t2 := time.Now()
+			// fmt.Printf("\u001b[34;1mRead\u001b[0m SettingsFrame: %v\n", t2.Sub(t1).Seconds())
 		case *PushPromiseFrame:
+			// println("PushPromiseFrame")
 			err = rl.processPushPromise(f)
 		case *WindowUpdateFrame:
+			// println("WindowUpdateFrame")
+			// t1 := time.Now()
 			err = rl.processWindowUpdate(f)
+			// t2 := time.Now()
+			// fmt.Printf("\u001b[34;1mRead\u001b[0m WindowUpdateFrame: %v\n", t2.Sub(t1).Seconds())
 		case *PingFrame:
+			// println("PingFrame")
 			err = rl.processPing(f)
 		default:
 			cc.logf("Transport: unhandled response frame type %T", f)
@@ -1892,6 +1955,7 @@ func (rl *clientConnReadLoop) run() error {
 }
 
 func (rl *clientConnReadLoop) processHeaders(f *MetaHeadersFrame) error {
+	// println("process headers")
 	cc := rl.cc
 	cs := cc.streamByID(f.StreamID, false)
 	if cs == nil {
@@ -2162,6 +2226,7 @@ func (b transportResponseBody) Read(p []byte) (n int, err error) {
 		if streamAdd != 0 {
 			cc.fr.WriteWindowUpdate(cs.ID, mustUint31(streamAdd))
 		}
+		println("B")
 		cc.bw.Flush()
 	}
 	return
@@ -2188,7 +2253,10 @@ func (b transportResponseBody) Close() error {
 			cc.inflow.add(int32(unread))
 			cc.fr.WriteWindowUpdate(0, uint32(unread))
 		}
+		t1 := time.Now()
 		cc.bw.Flush()
+		t2 := time.Now()
+		fmt.Printf("Close, \u001b[34;1mWrite\u001b[0m: %v (second)\n", t2.Sub(t1).Seconds())
 		cc.wmu.Unlock()
 		cc.mu.Unlock()
 	}
@@ -2224,7 +2292,9 @@ func (rl *clientConnReadLoop) processData(f *DataFrame) error {
 
 			cc.wmu.Lock()
 			cc.fr.WriteWindowUpdate(0, uint32(f.Length))
+			println("PrcessData1")
 			cc.bw.Flush()
+			println("PrcessData1 End")
 			cc.wmu.Unlock()
 		}
 		return nil
@@ -2274,7 +2344,9 @@ func (rl *clientConnReadLoop) processData(f *DataFrame) error {
 				cs.inflow.add(int32(refund))
 				cc.fr.WriteWindowUpdate(cs.ID, uint32(refund))
 			}
+			println("PrcessData2")
 			cc.bw.Flush()
+			println("PrcessData2 End")
 			cc.wmu.Unlock()
 		}
 		cc.mu.Unlock()
@@ -2300,6 +2372,7 @@ func (rl *clientConnReadLoop) endStream(cs *clientStream) {
 }
 
 func (rl *clientConnReadLoop) endStreamError(cs *clientStream, err error) {
+	// println("end stream error")
 	var code func()
 	if err == nil {
 		err = io.EOF
@@ -2391,7 +2464,10 @@ func (rl *clientConnReadLoop) processSettings(f *SettingsFrame) error {
 	defer cc.wmu.Unlock()
 
 	cc.fr.WriteSettingsAck()
+	t1 := time.Now()
 	cc.bw.Flush()
+	t2 := time.Now()
+	fmt.Printf("processSettings, \u001b[34;1mWrite\u001b[0m: %v (seconds)\n", t2.Sub(t1).Seconds())
 	return cc.werr
 }
 
@@ -2461,6 +2537,7 @@ func (cc *ClientConn) Ping(ctx context.Context) error {
 		cc.wmu.Unlock()
 		return err
 	}
+	println("E")
 	if err := cc.bw.Flush(); err != nil {
 		cc.wmu.Unlock()
 		return err
@@ -2495,6 +2572,7 @@ func (rl *clientConnReadLoop) processPing(f *PingFrame) error {
 	if err := cc.fr.WritePing(true, f.Data); err != nil {
 		return err
 	}
+	println("F")
 	return cc.bw.Flush()
 }
 
@@ -2516,6 +2594,7 @@ func (cc *ClientConn) writeStreamReset(streamID uint32, code ErrCode, err error)
 	// data, and the error codes are all pretty vague ("cancel").
 	cc.wmu.Lock()
 	cc.fr.WriteRSTStream(streamID, code)
+	println("G")
 	cc.bw.Flush()
 	cc.wmu.Unlock()
 }
@@ -2557,11 +2636,11 @@ func strSliceContains(ss []string, s string) bool {
 type erringRoundTripper struct{ err error }
 
 func (rt erringRoundTripper) RoundTripErr() error {
-	println("http2 err RT")
+	// println("http2 err RT")
 	return rt.err
 }
 func (rt erringRoundTripper) RoundTrip(*http.Request) (*http.Response, error) {
-	println("http2 err RT")
+	// println("http2 err RT")
 	return nil, rt.err
 }
 
@@ -2702,7 +2781,7 @@ func registerHTTPSProtocol(t *http.Transport, rt noDialH2RoundTripper) (err erro
 type noDialH2RoundTripper struct{ *Transport }
 
 func (rt noDialH2RoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	println("http2 nodial RTO")
+	// println("http2 nodial RTO")
 	res, err := rt.Transport.RoundTrip(req)
 	if isNoCachedConnError(err) {
 		return nil, http.ErrSkipAltProtocol
