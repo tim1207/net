@@ -491,6 +491,8 @@ func terminalReadFrameError(err error) bool {
 // returned error is ErrFrameTooLarge. Other errors may be of type
 // ConnectionError, StreamError, or anything else from the underlying
 // reader.
+var sum float64 = 0.0
+
 func (fr *Framer) ReadFrame() (Frame, error) {
 	fr.errDetail = nil
 	if fr.lastFrame != nil {
@@ -509,7 +511,9 @@ func (fr *Framer) ReadFrame() (Frame, error) {
 		return nil, err
 	}
 	t4 := time.Now()
-	fmt.Printf("ReadFrame, \u001b[32mHeader+Payload\u001b[0m: %v (second)\n", t4.Sub(t1).Seconds())
+	sum += t4.Sub(t1).Seconds()
+	// fmt.Printf("ReadFrame, \u001b[32mHeader+Payload\u001b[0m: %v (second)\n", t4.Sub(t1).Seconds())
+	fmt.Printf("ReadFrame, \u001b[32mAccumulated Sum\u001b[0m: %.6f (second)\n", sum)
 	f, err := typeFrameParser(fh.Type)(fr.frameCache, fh, fr.countError, payload)
 	if err != nil {
 		if ce, ok := err.(connError); ok {
