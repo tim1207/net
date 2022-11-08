@@ -8,8 +8,9 @@ import (
 	"bufio"
 	"io"
 	"net"
-	"net/http"
 	"net/url"
+
+	"github.com/nycu-ucr/gonet/http"
 )
 
 // DialError is an error that occurs while dialling a websocket server.

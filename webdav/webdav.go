@@ -9,12 +9,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"net/url"
 	"os"
 	"path"
 	"strings"
 	"time"
+
+	"github.com/nycu-ucr/gonet/http"
 )
 
 type Handler struct {

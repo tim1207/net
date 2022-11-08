@@ -70,7 +70,6 @@ import (
 	"io"
 	"log"
 	"net"
-	"net/http"
 	"net/url"
 	"runtime"
 	"sort"
@@ -78,6 +77,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/nycu-ucr/gonet/http"
 
 	"github.com/nycu-ucr/net/internal/timeseries"
 )

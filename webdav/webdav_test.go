@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
@@ -19,6 +18,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/nycu-ucr/gonet/http"
 )
 
 // TODO: add tests to check XML responses with the expected prefix path

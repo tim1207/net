@@ -6,7 +6,8 @@ package websocket_test
 
 import (
 	"io"
-	"net/http"
+
+	"github.com/nycu-ucr/gonet/http"
 
 	"github.com/nycu-ucr/net/websocket"
 )

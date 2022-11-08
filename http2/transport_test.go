@@ -18,7 +18,6 @@ import (
 	"log"
 	"math/rand"
 	"net"
-	"net/http"
 	"net/http/httptest"
 	"net/http/httptrace"
 	"net/textproto"
@@ -33,6 +32,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/nycu-ucr/gonet/http"
 
 	"github.com/nycu-ucr/net/http2/hpack"
 )

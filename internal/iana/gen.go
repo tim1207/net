@@ -18,10 +18,11 @@ import (
 	"go/format"
 	"io"
 	"io/ioutil"
-	"net/http"
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/nycu-ucr/gonet/http"
 )
 
 var registries = []struct {

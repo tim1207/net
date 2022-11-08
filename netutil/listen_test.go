@@ -10,11 +10,12 @@ import (
 	"io"
 	"io/ioutil"
 	"net"
-	"net/http"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/nycu-ucr/gonet/http"
 )
 
 const defaultMaxOpenFiles = 256

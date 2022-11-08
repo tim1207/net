@@ -21,7 +21,6 @@ import (
 	"math"
 	mathrand "math/rand"
 	"net"
-	"net/http"
 	"net/http/httptrace"
 	"net/textproto"
 	"sort"
@@ -30,6 +29,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/nycu-ucr/gonet/http"
 
 	"github.com/nycu-ucr/net/http/httpguts"
 	"github.com/nycu-ucr/net/http2/hpack"

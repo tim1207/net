@@ -17,9 +17,10 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/nycu-ucr/gonet/http"
 )
 
 const (

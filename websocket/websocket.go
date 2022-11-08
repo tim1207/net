@@ -20,10 +20,11 @@ import (
 	"io"
 	"io/ioutil"
 	"net"
-	"net/http"
 	"net/url"
 	"sync"
 	"time"
+
+	"github.com/nycu-ucr/gonet/http"
 )
 
 const (

@@ -9,12 +9,13 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net/http"
 	"reflect"
 	"strconv"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/nycu-ucr/gonet/http"
 )
 
 func TestServer_Push_Success(t *testing.T) {

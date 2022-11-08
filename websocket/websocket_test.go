@@ -11,7 +11,6 @@ import (
 	"io"
 	"log"
 	"net"
-	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"reflect"
@@ -20,6 +19,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/nycu-ucr/gonet/http"
 )
 
 var serverAddr string

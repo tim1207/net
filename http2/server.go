@@ -36,7 +36,6 @@ import (
 	"log"
 	"math"
 	"net"
-	"net/http"
 	"net/textproto"
 	"net/url"
 	"os"
@@ -46,6 +45,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/nycu-ucr/gonet/http"
 
 	"github.com/nycu-ucr/net/http/httpguts"
 	"github.com/nycu-ucr/net/http2/hpack"

@@ -27,11 +27,12 @@ import (
 	"go/format"
 	"io"
 	"io/ioutil"
-	"net/http"
 	"os"
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/nycu-ucr/gonet/http"
 
 	"github.com/nycu-ucr/net/idna"
 )

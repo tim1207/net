@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/xml"
 	"io"
-	"net/http"
 	"os"
 	"path"
 	"path/filepath"
@@ -16,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/nycu-ucr/gonet/http"
 )
 
 // slashClean is equivalent to but slightly more efficient than
@@ -163,6 +164,7 @@ type memFS struct {
 //   - "/", "foo", false
 //   - "/foo/", "bar", false
 //   - "/foo/bar/", "x", true
+//
 // The frag argument will be empty only if dir is the root node and the walk
 // ends at that root node.
 func (fs *memFS) walk(op, fullname string, f func(dir *memFSNode, frag string, final bool) error) error {

@@ -20,12 +20,13 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/nycu-ucr/gonet/http"
 
 	"github.com/nycu-ucr/net/http/httpguts"
 )

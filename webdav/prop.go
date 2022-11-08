@@ -12,10 +12,11 @@ import (
 	"fmt"
 	"io"
 	"mime"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
+
+	"github.com/nycu-ucr/gonet/http"
 )
 
 // Proppatch describes a property update instruction as defined in RFC 4918.

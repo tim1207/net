@@ -8,8 +8,9 @@ import (
 	"bytes"
 	"fmt"
 	"log"
-	"net/http"
 	"net/url"
+
+	"github.com/nycu-ucr/gonet/http"
 
 	"golang.org/x/net/http/httpguts"
 	"golang.org/x/net/http2/hpack"

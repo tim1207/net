@@ -9,12 +9,13 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
-	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/nycu-ucr/gonet/http"
 
 	ixml "github.com/nycu-ucr/net/webdav/internal/xml"
 )

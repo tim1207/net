@@ -31,11 +31,12 @@ import (
 	"io"
 	"log"
 	"net"
-	"net/http"
 	"os"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/nycu-ucr/gonet/http"
 
 	"github.com/nycu-ucr/net/http2"
 	"github.com/nycu-ucr/net/http2/hpack"

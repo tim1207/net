@@ -10,7 +10,6 @@ import (
 	"html/template"
 	"io"
 	"log"
-	"net/http"
 	"runtime"
 	"sort"
 	"strconv"
@@ -19,6 +18,8 @@ import (
 	"sync/atomic"
 	"text/tabwriter"
 	"time"
+
+	"github.com/nycu-ucr/gonet/http"
 )
 
 const maxEventsPerLog = 100

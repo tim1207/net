@@ -12,8 +12,9 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
-	"net/http"
 	"time"
+
+	"github.com/nycu-ucr/gonet/http"
 
 	// As of https://go-review.googlesource.com/#/c/12772/ which was submitted
 	// in July 2015, this package uses an internal fork of the standard

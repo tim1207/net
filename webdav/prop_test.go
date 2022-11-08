@@ -8,12 +8,13 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
-	"net/http"
 	"os"
 	"reflect"
 	"regexp"
 	"sort"
 	"testing"
+
+	"github.com/nycu-ucr/gonet/http"
 )
 
 func TestMemPS(t *testing.T) {

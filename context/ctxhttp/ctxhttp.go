@@ -8,9 +8,10 @@ package ctxhttp // import "github.com/nycu-ucr/net/context/ctxhttp"
 import (
 	"context"
 	"io"
-	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/nycu-ucr/gonet/http"
 )
 
 // Do sends an HTTP request with the provided http.Client and returns

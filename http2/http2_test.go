@@ -10,7 +10,6 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,6 +18,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/nycu-ucr/gonet/http"
 
 	"github.com/nycu-ucr/net/http2/hpack"
 )

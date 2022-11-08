@@ -9,10 +9,11 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"net/http"
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/nycu-ucr/gonet/http"
 )
 
 // Test the getNonceAccept function with values in

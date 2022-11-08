@@ -9,12 +9,13 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"net/http"
 	"os/exec"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/nycu-ucr/gonet/http"
 
 	"github.com/nycu-ucr/net/http2/hpack"
 )

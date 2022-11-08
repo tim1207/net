@@ -17,7 +17,6 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
-	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
@@ -29,6 +28,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/nycu-ucr/gonet/http"
 
 	"github.com/nycu-ucr/net/http2/hpack"
 )

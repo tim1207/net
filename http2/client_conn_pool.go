@@ -10,8 +10,9 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"net/http"
 	"sync"
+
+	"github.com/nycu-ucr/gonet/http"
 )
 
 // ClientConnPool manages a pool of HTTP/2 client connections.

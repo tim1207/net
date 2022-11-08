@@ -17,10 +17,11 @@ import (
 	"io"
 	"log"
 	"net"
-	"net/http"
 	"net/textproto"
 	"os"
 	"strings"
+
+	"github.com/nycu-ucr/gonet/http"
 
 	"github.com/nycu-ucr/net/http/httpguts"
 	"github.com/nycu-ucr/net/http2"
