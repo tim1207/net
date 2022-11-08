@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+//go:build ignore
 // +build ignore
 
 /*
@@ -24,7 +25,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"golang.org/x/net/webdav"
+	"github.com/nycu-ucr/net/webdav"
 )
 
 var port = flag.Int("port", 9999, "server port")

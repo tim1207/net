@@ -21,9 +21,9 @@
 // explicitly to each function that needs it. The Context should be the first
 // parameter, typically named ctx:
 //
-// 	func DoSomething(ctx context.Context, arg Arg) error {
-// 		// ... use ctx ...
-// 	}
+//	func DoSomething(ctx context.Context, arg Arg) error {
+//		// ... use ctx ...
+//	}
 //
 // Do not pass a nil Context, even if a function permits it. Pass context.TODO
 // if you are unsure about which Context to use.
@@ -36,7 +36,7 @@
 //
 // See http://blog.golang.org/context for example code for a server that uses
 // Contexts.
-package context // import "golang.org/x/net/context"
+package context // import "github.com/nycu-ucr/net/context"
 
 // Background returns a non-nil, empty Context. It is never canceled, has no
 // values, and has no deadline. It is typically used by the main function,
