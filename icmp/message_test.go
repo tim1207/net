@@ -10,10 +10,10 @@ import (
 	"reflect"
 	"testing"
 
-	"golang.org/x/net/icmp"
-	"golang.org/x/net/internal/iana"
-	"golang.org/x/net/ipv4"
-	"golang.org/x/net/ipv6"
+	"github.com/nycu-ucr/net/icmp"
+	"github.com/nycu-ucr/net/internal/iana"
+	"github.com/nycu-ucr/net/ipv4"
+	"github.com/nycu-ucr/net/ipv6"
 )
 
 func TestMarshalAndParseMessage(t *testing.T) {

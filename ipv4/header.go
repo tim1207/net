@@ -10,7 +10,7 @@ import (
 	"net"
 	"runtime"
 
-	"golang.org/x/net/internal/socket"
+	"github.com/nycu-ucr/net/internal/socket"
 )
 
 const (

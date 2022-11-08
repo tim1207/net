@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+//go:build netbsd || openbsd
 // +build netbsd openbsd
 
 package ipv4
@@ -10,8 +11,8 @@ import (
 	"net"
 	"syscall"
 
-	"golang.org/x/net/internal/iana"
-	"golang.org/x/net/internal/socket"
+	"github.com/nycu-ucr/net/internal/iana"
+	"github.com/nycu-ucr/net/internal/socket"
 )
 
 var (

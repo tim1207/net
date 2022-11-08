@@ -31,10 +31,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/nycu-ucr/net/http/httpguts"
+	"github.com/nycu-ucr/net/http2/hpack"
+	"github.com/nycu-ucr/net/idna"
 	"github.com/nycu-ucr/onvmpoller"
-	"golang.org/x/net/http/httpguts"
-	"golang.org/x/net/http2/hpack"
-	"golang.org/x/net/idna"
 )
 
 const (

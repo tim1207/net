@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+//go:build aix || darwin || dragonfly || freebsd || linux || netbsd || openbsd || solaris || zos
 // +build aix darwin dragonfly freebsd linux netbsd openbsd solaris zos
 
 package ipv6
@@ -9,7 +10,7 @@ package ipv6
 import (
 	"net"
 
-	"golang.org/x/net/internal/socket"
+	"github.com/nycu-ucr/net/internal/socket"
 )
 
 // ReadFrom reads a payload of the received IPv6 datagram, from the

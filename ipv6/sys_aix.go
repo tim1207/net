@@ -3,6 +3,7 @@
 // license that can be found in the LICENSE file.
 
 // Added for go1.11 compatibility
+//go:build aix
 // +build aix
 
 package ipv6
@@ -12,8 +13,8 @@ import (
 	"syscall"
 	"unsafe"
 
-	"golang.org/x/net/internal/iana"
-	"golang.org/x/net/internal/socket"
+	"github.com/nycu-ucr/net/internal/iana"
+	"github.com/nycu-ucr/net/internal/socket"
 )
 
 var (

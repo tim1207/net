@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+//go:build darwin
 // +build darwin
 
 package ipv6
@@ -9,8 +10,8 @@ package ipv6
 import (
 	"unsafe"
 
-	"golang.org/x/net/internal/iana"
-	"golang.org/x/net/internal/socket"
+	"github.com/nycu-ucr/net/internal/iana"
+	"github.com/nycu-ucr/net/internal/socket"
 )
 
 func marshal2292HopLimit(b []byte, cm *ControlMessage) []byte {

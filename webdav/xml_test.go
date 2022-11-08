@@ -16,7 +16,7 @@ import (
 	"strings"
 	"testing"
 
-	ixml "golang.org/x/net/webdav/internal/xml"
+	ixml "github.com/nycu-ucr/net/webdav/internal/xml"
 )
 
 func TestReadLockInfo(t *testing.T) {
@@ -827,15 +827,14 @@ type xmlNormalizer struct {
 // normalize writes the normalized XML content of r to w. It applies the
 // following rules
 //
-//     * Rename namespace prefixes according to an internal heuristic.
-//     * Remove unnecessary namespace declarations.
-//     * Sort attributes in XML start elements in lexical order of their
-//       fully qualified name.
-//     * Remove XML directives and processing instructions.
-//     * Remove CDATA between XML tags that only contains whitespace, if
-//       instructed to do so.
-//     * Remove comments, if instructed to do so.
-//
+//   - Rename namespace prefixes according to an internal heuristic.
+//   - Remove unnecessary namespace declarations.
+//   - Sort attributes in XML start elements in lexical order of their
+//     fully qualified name.
+//   - Remove XML directives and processing instructions.
+//   - Remove CDATA between XML tags that only contains whitespace, if
+//     instructed to do so.
+//   - Remove comments, if instructed to do so.
 func (n *xmlNormalizer) normalize(w io.Writer, r io.Reader) error {
 	d := ixml.NewDecoder(r)
 	e := ixml.NewEncoder(w)

@@ -8,8 +8,8 @@ import (
 	"net"
 	"unsafe"
 
-	"golang.org/x/net/internal/iana"
-	"golang.org/x/net/internal/socket"
+	"github.com/nycu-ucr/net/internal/iana"
+	"github.com/nycu-ucr/net/internal/socket"
 )
 
 func marshalPacketInfo(b []byte, cm *ControlMessage) []byte {
