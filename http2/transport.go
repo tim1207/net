@@ -290,9 +290,10 @@ type ClientConn struct {
 	nextStreamID    uint32
 	pendingRequests int                       // requests blocked and waiting to be sent because len(streams) == maxConcurrentStreams
 	pings           map[[8]byte]chan struct{} // in flight ping data to notification channel
-	br              *bufio.Reader
-	lastActive      time.Time
-	lastIdle        time.Time // time last idle
+	// br              *bufio.Reader
+	br         io.Reader
+	lastActive time.Time
+	lastIdle   time.Time // time last idle
 	// Settings from peer: (also guarded by wmu)
 	maxFrameSize          uint32
 	maxConcurrentStreams  uint32
@@ -611,11 +612,12 @@ func canRetryError(err error) bool {
 }
 
 func (t *Transport) dialClientConn(ctx context.Context, addr string, singleUse bool) (*ClientConn, error) {
+	// host, _, err := net.SplitHostPort(addr)
 	_, _, err := net.SplitHostPort(addr)
 	if err != nil {
 		return nil, err
 	}
-	// tconn, err := t.dialTLS()("tcp", addr, t.newTLSConfig(host))
+	// tconn, err := t.dialTLS(ctx, "tcp", addr, t.newTLSConfig(host))
 	println("\u001b[33m You are using ONVM \u001b[0m, HTTP2 transport.go")
 	t1 := time.Now()
 	tconn, err := onvmpoller.DialONVM("onvm", addr)
@@ -713,7 +715,8 @@ func (t *Transport) newClientConn(c net.Conn, singleUse bool) (*ClientConn, erro
 		timeout: t.WriteByteTimeout,
 		err:     &cc.werr,
 	})
-	cc.br = bufio.NewReader(c)
+	// cc.br = bufio.NewReader(c)
+	cc.br = c
 	cc.fr = NewFramer(cc.bw, cc.br)
 	if t.CountError != nil {
 		cc.fr.countError = t.CountError
