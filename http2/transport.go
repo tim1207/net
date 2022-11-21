@@ -7,7 +7,6 @@
 package http2
 
 import (
-	"bufio"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -290,10 +289,9 @@ type ClientConn struct {
 	nextStreamID    uint32
 	pendingRequests int                       // requests blocked and waiting to be sent because len(streams) == maxConcurrentStreams
 	pings           map[[8]byte]chan struct{} // in flight ping data to notification channel
-	// br              *bufio.Reader
-	br         io.Reader
-	lastActive time.Time
-	lastIdle   time.Time // time last idle
+	br              io.Reader                 // *bufio.Reader
+	lastActive      time.Time
+	lastIdle        time.Time // time last idle
 	// Settings from peer: (also guarded by wmu)
 	maxFrameSize          uint32
 	maxConcurrentStreams  uint32
@@ -309,7 +307,7 @@ type ClientConn struct {
 	// Acquire BEFORE mu when holding both, to avoid blocking mu on network writes.
 	// Only acquire both at the same time when changing peer settings.
 	wmu  sync.Mutex
-	bw   *bufio.Writer
+	bw   io.Writer //*bufio.Writer
 	fr   *Framer
 	werr error        // first write error that has occurred
 	hbuf bytes.Buffer // HPACK encoder writes into this
@@ -710,11 +708,12 @@ func (t *Transport) newClientConn(c net.Conn, singleUse bool) (*ClientConn, erro
 
 	// TODO: adjust this writer size to account for frame size +
 	// MTU + crypto/tls record padding.
-	cc.bw = bufio.NewWriter(stickyErrWriter{
-		conn:    c,
-		timeout: t.WriteByteTimeout,
-		err:     &cc.werr,
-	})
+	// cc.bw = bufio.NewWriter(stickyErrWriter{
+	// 	conn:    c,
+	// 	timeout: t.WriteByteTimeout,
+	// 	err:     &cc.werr,
+	// })
+	cc.bw = c
 	// cc.br = bufio.NewReader(c)
 	cc.br = c
 	cc.fr = NewFramer(cc.bw, cc.br)
@@ -749,10 +748,10 @@ func (t *Transport) newClientConn(c net.Conn, singleUse bool) (*ClientConn, erro
 	cc.fr.WriteSettings(initialSettings...)
 	cc.fr.WriteWindowUpdate(0, transportDefaultConnFlow)
 	cc.inflow.add(transportDefaultConnFlow + initialWindowSize)
-	t1 := time.Now()
-	cc.bw.Flush()
-	t2 := time.Now()
-	fmt.Printf("newClientConn, \u001b[34;1mWrite\u001b[0m: %v (second)\n", t2.Sub(t1).Seconds())
+	// t1 := time.Now()
+	// cc.bw.Flush()
+	// t2 := time.Now()
+	// fmt.Printf("newClientConn, \u001b[34;1mWrite\u001b[0m: %v (second)\n", t2.Sub(t1).Seconds())
 	if cc.werr != nil {
 		cc.Close()
 		return nil, cc.werr
@@ -1043,9 +1042,9 @@ func (cc *ClientConn) sendGoAway() error {
 	if err := cc.fr.WriteGoAway(maxStreamID, ErrCodeNo, nil); err != nil {
 		return err
 	}
-	if err := cc.bw.Flush(); err != nil {
-		return err
-	}
+	// if err := cc.bw.Flush(); err != nil {
+	// 	return err
+	// }
 	// Prevent new requests
 	return nil
 }
@@ -1558,10 +1557,10 @@ func (cc *ClientConn) writeHeaders(streamID uint32, endStream bool, maxFrameSize
 			cc.fr.WriteContinuation(streamID, endHeaders, chunk)
 		}
 	}
-	t1 := time.Now()
-	cc.bw.Flush()
-	t2 := time.Now()
-	fmt.Printf("writeHeaders, \u001b[34;1mWrite\u001b[0m: %v (second)\n", t2.Sub(t1).Seconds())
+	// t1 := time.Now()
+	// cc.bw.Flush()
+	// t2 := time.Now()
+	// fmt.Printf("writeHeaders, \u001b[34;1mWrite\u001b[0m: %v (second)\n", t2.Sub(t1).Seconds())
 	return cc.werr
 }
 
@@ -1683,10 +1682,10 @@ func (cs *clientStream) writeRequestBody(req *http.Request) (err error) {
 				// timers?  Based on 'n'? Only last chunk of this for loop,
 				// unless flow control tokens are low? For now, always.
 				// If we change this, see comment below.
-				t1 := time.Now()
-				err = cc.bw.Flush()
-				t2 := time.Now()
-				fmt.Printf("writeRequestBody, \u001b[34;1mWrite\u001b[0m: %v (second)\n", t2.Sub(t1).Seconds())
+				// t1 := time.Now()
+				// err = cc.bw.Flush()
+				// t2 := time.Now()
+				// fmt.Printf("writeRequestBody, \u001b[34;1mWrite\u001b[0m: %v (second)\n", t2.Sub(t1).Seconds())
 			}
 			cc.wmu.Unlock()
 		}
@@ -1730,9 +1729,9 @@ func (cs *clientStream) writeRequestBody(req *http.Request) (err error) {
 	} else {
 		err = cc.fr.WriteData(cs.ID, true, nil)
 	}
-	if ferr := cc.bw.Flush(); ferr != nil && err == nil {
-		err = ferr
-	}
+	// if ferr := cc.bw.Flush(); ferr != nil && err == nil {
+	// 	err = ferr
+	// }
 	return err
 }
 
@@ -2508,7 +2507,7 @@ func (b transportResponseBody) Read(p []byte) (n int, err error) {
 		if streamAdd != 0 {
 			cc.fr.WriteWindowUpdate(cs.ID, mustUint31(streamAdd))
 		}
-		cc.bw.Flush()
+		// cc.bw.Flush()
 	}
 	return
 }
@@ -2535,10 +2534,10 @@ func (b transportResponseBody) Close() error {
 		if unread > 0 {
 			cc.fr.WriteWindowUpdate(0, uint32(unread))
 		}
-		t1 := time.Now()
-		cc.bw.Flush()
-		t2 := time.Now()
-		fmt.Printf("Close, \u001b[34;1mWrite\u001b[0m: %v (second)\n", t2.Sub(t1).Seconds())
+		// t1 := time.Now()
+		// cc.bw.Flush()
+		// t2 := time.Now()
+		// fmt.Printf("Close, \u001b[34;1mWrite\u001b[0m: %v (second)\n", t2.Sub(t1).Seconds())
 		cc.wmu.Unlock()
 	}
 
@@ -2584,7 +2583,7 @@ func (rl *clientConnReadLoop) processData(f *DataFrame) error {
 
 			cc.wmu.Lock()
 			cc.fr.WriteWindowUpdate(0, uint32(f.Length))
-			cc.bw.Flush()
+			// cc.bw.Flush()
 			cc.wmu.Unlock()
 		}
 		return nil
@@ -2654,7 +2653,7 @@ func (rl *clientConnReadLoop) processData(f *DataFrame) error {
 			if !didReset {
 				cc.fr.WriteWindowUpdate(cs.ID, uint32(refund))
 			}
-			cc.bw.Flush()
+			// cc.bw.Flush()
 			cc.wmu.Unlock()
 		}
 
@@ -2737,10 +2736,10 @@ func (rl *clientConnReadLoop) processSettings(f *SettingsFrame) error {
 	}
 	if !f.IsAck() {
 		cc.fr.WriteSettingsAck()
-		t1 := time.Now()
-		cc.bw.Flush()
-		t2 := time.Now()
-		fmt.Printf("processSettings, \u001b[34;1mWrite\u001b[0m: %v (seconds)\n", t2.Sub(t1).Seconds())
+		// t1 := time.Now()
+		// cc.bw.Flush()
+		// t2 := time.Now()
+		// fmt.Printf("processSettings, \u001b[34;1mWrite\u001b[0m: %v (seconds)\n", t2.Sub(t1).Seconds())
 	}
 	return nil
 }
@@ -2878,10 +2877,10 @@ func (cc *ClientConn) Ping(ctx context.Context) error {
 			errc <- err
 			return
 		}
-		if err := cc.bw.Flush(); err != nil {
-			errc <- err
-			return
-		}
+		// if err := cc.bw.Flush(); err != nil {
+		// 	errc <- err
+		// 	return
+		// }
 	}()
 	select {
 	case <-c:
@@ -2897,6 +2896,7 @@ func (cc *ClientConn) Ping(ctx context.Context) error {
 }
 
 func (rl *clientConnReadLoop) processPing(f *PingFrame) error {
+	var err error
 	if f.IsAck() {
 		cc := rl.cc
 		cc.mu.Lock()
@@ -2911,10 +2911,11 @@ func (rl *clientConnReadLoop) processPing(f *PingFrame) error {
 	cc := rl.cc
 	cc.wmu.Lock()
 	defer cc.wmu.Unlock()
-	if err := cc.fr.WritePing(true, f.Data); err != nil {
+	if err = cc.fr.WritePing(true, f.Data); err != nil {
 		return err
 	}
-	return cc.bw.Flush()
+	// return cc.bw.Flush()
+	return err
 }
 
 func (rl *clientConnReadLoop) processPushPromise(f *PushPromiseFrame) error {
@@ -2935,7 +2936,7 @@ func (cc *ClientConn) writeStreamReset(streamID uint32, code ErrCode, err error)
 	// data, and the error codes are all pretty vague ("cancel").
 	cc.wmu.Lock()
 	cc.fr.WriteRSTStream(streamID, code)
-	cc.bw.Flush()
+	// cc.bw.Flush()
 	cc.wmu.Unlock()
 }
 
