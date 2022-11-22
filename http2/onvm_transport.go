@@ -5,6 +5,7 @@ import (
 	"encoding/gob"
 	"io"
 	"net"
+	urlpkg "net/url"
 
 	"github.com/nycu-ucr/gonet/http"
 )
@@ -96,30 +97,66 @@ func decodeResponse(buf []byte) (*ResponseWrapper, error) {
 	return &resp_wrapper, err
 }
 
-type OnvmTransport struct{}
+type OnvmClientConn struct {
+	conn net.Conn
+}
 
-func (t *OnvmTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	var err error
+func (occ *OnvmClientConn) WriteClientPreface() {
+	req := &http.Request{
+		Method: "PRI",
+		URL:    urlpkg.URL{Path: "*"},
+		Proto:  "HTTP/2.0",
+		Body:   bytes.NewReader([]byte("SM\r\n\r\n")),
+	}
 
-	ori_req := req
-	println(ori_req)
+	occ.WriteRequest(req)
+}
 
-	conn, err := t.GetConn(req)
-
+func (occ *OnvmClientConn) WriteRequest(req *http.Request) error {
 	b, err := encodeRequest(req)
-	conn.Write(b)
+	occ.conn.Write(b)
 
-	buf := make([]byte, 4096*2)
-	conn.Read(buf)
+	return err
+}
+
+func (occ *OnvmClientConn) ReadResponse() (*http.Response, error) {
+	buf := make([]byte, 16<<10)
+	occ.conn.Read(buf)
 	resp_wrapper, err := decodeResponse(buf)
 	resp_wrapper.Response.Body = io.NopCloser(bytes.NewBuffer(resp_wrapper.Body))
 
 	return resp_wrapper.Response, err
 }
 
-func (t *OnvmTransport) GetConn(req *http.Request) (net.Conn, error) {
+type OnvmTransport struct{}
+
+func (t *OnvmTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	var err error
+
+	// Get Connection
+	occ, err := t.GetConn(req)
+
+	// Send Client Preface
+	occ.WriteClientPreface()
+
+	// Send Request
+	err = occ.WriteRequest(req)
+	if err != nil {
+		return nil, err
+	}
+
+	// Read Response
+	return occ.ReadResponse()
+}
+
+func (t *OnvmTransport) GetConn(req *http.Request) (*OnvmClientConn, error) {
 	// TODO: Use ONVM
-	return net.Dial("tcp", req.Host)
+	conn, err := net.Dial("tcp", req.Host)
+	if err != nil {
+		return nil, err
+	}
+
+	return &OnvmClientConn{conn: conn}, err
 }
 
 func WriteHeader(req *http.Request) {}
