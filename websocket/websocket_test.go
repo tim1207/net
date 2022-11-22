@@ -11,7 +11,6 @@ import (
 	"io"
 	"log"
 	"net"
-	"net/http/httptest"
 	"net/url"
 	"reflect"
 	"runtime"
@@ -19,6 +18,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/nycu-ucr/gonet/http/httptest"
 
 	"github.com/nycu-ucr/gonet/http"
 )

@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net/http/httptest"
 	"net/url"
 	"os"
 	"reflect"
@@ -18,6 +17,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/nycu-ucr/gonet/http/httptest"
 
 	"github.com/nycu-ucr/gonet/http"
 )

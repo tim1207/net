@@ -3,11 +3,11 @@ module github.com/nycu-ucr/net
 go 1.19
 
 require (
+	github.com/nycu-ucr/gonet v0.0.0-20221109040209-20587e818669
 	github.com/nycu-ucr/onvmpoller v0.0.0-20220929124448-6a86f69361a1
-	golang.org/x/net v0.0.0-20221002022538-bcab6841153b
-	golang.org/x/sys v0.0.0-20220928140112-f11e5e49a4ec
+	golang.org/x/sys v0.1.0
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211
-	golang.org/x/text v0.3.7
+	golang.org/x/text v0.4.0
 )
 
 require (

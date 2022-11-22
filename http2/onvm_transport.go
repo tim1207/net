@@ -3,11 +3,13 @@ package http2
 import (
 	"bytes"
 	"encoding/gob"
+	"fmt"
 	"io"
 	"net"
 	urlpkg "net/url"
 
 	"github.com/nycu-ucr/gonet/http"
+	"github.com/nycu-ucr/onvmpoller"
 )
 
 // type SmallRequest struct {
@@ -104,9 +106,9 @@ type OnvmClientConn struct {
 func (occ *OnvmClientConn) WriteClientPreface() {
 	req := &http.Request{
 		Method: "PRI",
-		URL:    urlpkg.URL{Path: "*"},
+		URL:    &urlpkg.URL{Path: "*"},
 		Proto:  "HTTP/2.0",
-		Body:   bytes.NewReader([]byte("SM\r\n\r\n")),
+		Body:   io.NopCloser(bytes.NewReader([]byte("SM\r\n\r\n"))),
 	}
 
 	occ.WriteRequest(req)
@@ -128,13 +130,23 @@ func (occ *OnvmClientConn) ReadResponse() (*http.Response, error) {
 	return resp_wrapper.Response, err
 }
 
-type OnvmTransport struct{}
+func (occ *OnvmClientConn) Close() {
+	occ.conn.Close()
+}
 
-func (t *OnvmTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+type OnvmTransport struct {
+	UseONVM bool
+}
+
+func (ot *OnvmTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	var err error
 
 	// Get Connection
-	occ, err := t.GetConn(req)
+	occ, err := ot.GetConn(req)
+	if err != nil {
+		return nil, err
+	}
+	defer occ.Close()
 
 	// Send Client Preface
 	occ.WriteClientPreface()
@@ -149,9 +161,16 @@ func (t *OnvmTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return occ.ReadResponse()
 }
 
-func (t *OnvmTransport) GetConn(req *http.Request) (*OnvmClientConn, error) {
-	// TODO: Use ONVM
-	conn, err := net.Dial("tcp", req.Host)
+func (ot *OnvmTransport) GetConn(req *http.Request) (*OnvmClientConn, error) {
+	var conn net.Conn
+	var err error
+	if ot.UseONVM {
+		fmt.Println("net/http2/onvm_transport, use ONVM")
+		conn, err = onvmpoller.DialONVM("onvm", req.Host)
+	} else {
+		fmt.Println("net/http2/onvm_transport, use TCP")
+		conn, err = net.Dial("tcp", req.Host)
+	}
 	if err != nil {
 		return nil, err
 	}

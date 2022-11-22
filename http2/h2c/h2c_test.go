@@ -11,12 +11,11 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/nycu-ucr/gonet/http"
-
+	"github.com/nycu-ucr/gonet/http/httptest"
 	"github.com/nycu-ucr/net/http2"
 )
 
