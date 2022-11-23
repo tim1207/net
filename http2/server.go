@@ -502,7 +502,22 @@ func (s *Server) ServeConn(c net.Conn, opts *ServeConnOpts) {
 		opts.UpgradeRequest = nil
 	}
 
-	sc.serve()
+	st := sc.newStream(0, 0, stateOpen)
+	buff := make([]byte, 10240)
+	n, err := sc.conn.Read(buff)
+
+	if err != nil {
+		println("x/net/http2/server.go/ServeConn: net.Conn.Read -> %d bytes", n)
+	}
+	println("x/net/http2/server.go/ServeConn: net.Conn.Read error -> %+v", err)
+
+	req, err := DecodeRequest(buff)
+
+	rw := sc.newResponseWriter(st, req.Request)
+
+	sc.runHandler(rw, req.Request, sc.handler.ServeHTTP)
+
+	// sc.serve()
 }
 
 func serverConnBaseContext(c net.Conn, opts *ServeConnOpts) (ctx context.Context, cancel func()) {

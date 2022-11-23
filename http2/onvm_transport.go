@@ -65,11 +65,12 @@ type ResponseWrapper struct {
 	Body []byte
 }
 
-func encodeRequest(req *http.Request) ([]byte, error) {
+func EncodeRequest(req *http.Request) ([]byte, error) {
 	var buf bytes.Buffer
 
 	body_buf := make([]byte, req.ContentLength)
 	req.Body.Read(body_buf)
+	fmt.Printf("Before encode:\n Request:\n%+v Body:\n%+v\n", req, body_buf)
 
 	req_wrapper := RequestWrapper{Request: req, Body: body_buf}
 	req_wrapper.Request.Body = nil
@@ -81,16 +82,17 @@ func encodeRequest(req *http.Request) ([]byte, error) {
 	return buf.Bytes(), err
 }
 
-func decodeRequest(buf []byte) (*RequestWrapper, error) {
+func DecodeRequest(buf []byte) (*RequestWrapper, error) {
 	var req_wrapper RequestWrapper
 
 	dec := gob.NewDecoder(bytes.NewReader(buf))
 	err := dec.Decode(&req_wrapper)
+	fmt.Printf("After dencode:\n Request:\n%+v Body:\n%+v\n", req_wrapper.Request, req_wrapper.Body)
 
 	return &req_wrapper, err
 }
 
-func decodeResponse(buf []byte) (*ResponseWrapper, error) {
+func DecodeResponse(buf []byte) (*ResponseWrapper, error) {
 	var resp_wrapper ResponseWrapper
 
 	dec := gob.NewDecoder(bytes.NewReader(buf))
@@ -115,7 +117,7 @@ func (occ *OnvmClientConn) WriteClientPreface() {
 }
 
 func (occ *OnvmClientConn) WriteRequest(req *http.Request) error {
-	b, err := encodeRequest(req)
+	b, err := EncodeRequest(req)
 	occ.conn.Write(b)
 
 	return err
@@ -124,7 +126,7 @@ func (occ *OnvmClientConn) WriteRequest(req *http.Request) error {
 func (occ *OnvmClientConn) ReadResponse() (*http.Response, error) {
 	buf := make([]byte, 16<<10)
 	occ.conn.Read(buf)
-	resp_wrapper, err := decodeResponse(buf)
+	resp_wrapper, err := DecodeResponse(buf)
 	resp_wrapper.Response.Body = io.NopCloser(bytes.NewBuffer(resp_wrapper.Body))
 
 	return resp_wrapper.Response, err
