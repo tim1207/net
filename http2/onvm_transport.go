@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	urlpkg "net/url"
 
 	"github.com/nycu-ucr/gonet/http"
 	"github.com/nycu-ucr/onvmpoller"
@@ -54,6 +53,10 @@ import (
 // 	Request          *Request
 // 	TLS              *tls.ConnectionState
 // }
+
+var (
+	upgradePreface = []byte(ClientPreface)
+)
 
 type RequestWrapper struct {
 	*http.Request
@@ -106,14 +109,10 @@ type OnvmClientConn struct {
 }
 
 func (occ *OnvmClientConn) WriteClientPreface() {
-	req := &http.Request{
-		Method: "PRI",
-		URL:    &urlpkg.URL{Path: "*"},
-		Proto:  "HTTP/2.0",
-		Body:   io.NopCloser(bytes.NewReader([]byte("SM\r\n\r\n"))),
-	}
+	_, err := occ.conn.Write(upgradePreface)
+	if err != nil {
 
-	occ.WriteRequest(req)
+	}
 }
 
 func (occ *OnvmClientConn) WriteRequest(req *http.Request) error {
@@ -167,10 +166,10 @@ func (ot *OnvmTransport) GetConn(req *http.Request) (*OnvmClientConn, error) {
 	var conn net.Conn
 	var err error
 	if ot.UseONVM {
-		fmt.Println("net/http2/onvm_transport, use ONVM")
+		fmt.Println("nycu-ucr/net/http2/onvm_transport, use ONVM")
 		conn, err = onvmpoller.DialONVM("onvm", req.Host)
 	} else {
-		fmt.Println("net/http2/onvm_transport, use TCP")
+		fmt.Println("nycu-ucr/net/http2/onvm_transport, use TCP")
 		conn, err = net.Dial("tcp", req.Host)
 	}
 	if err != nil {
