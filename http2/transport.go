@@ -478,6 +478,7 @@ type RoundTripOpt struct {
 }
 
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
+	fmt.Printf("nycu-ucr/net/http2/transport.go/RoundTrip: \n[http.Request]\n %+v\n", req)
 	return t.RoundTripOpt(req, RoundTripOpt{})
 }
 

@@ -3,12 +3,16 @@ package http2
 import (
 	"bytes"
 	"encoding/gob"
-	"fmt"
 	"io"
 	"net"
+	"os"
+	"strings"
+	"time"
 
+	formatter "github.com/antonfisher/nested-logrus-formatter"
 	"github.com/nycu-ucr/gonet/http"
 	"github.com/nycu-ucr/onvmpoller"
+	"github.com/sirupsen/logrus"
 )
 
 // type SmallRequest struct {
@@ -54,6 +58,46 @@ import (
 // 	TLS              *tls.ConnectionState
 // }
 
+const (
+	LOG_LEVEL = logrus.TraceLevel
+)
+
+var (
+	logg *logrus.Logger
+	Log  *logrus.Entry
+)
+
+func init() {
+	logg = logrus.New()
+	logg.SetReportCaller(false)
+
+	/* Setup Logger */
+	SetLogLevel(LOG_LEVEL)
+
+	logg.Formatter = &formatter.Formatter{
+		TimestampFormat: time.RFC3339,
+		TrimMessages:    true,
+		NoFieldsSpace:   true,
+		HideKeys:        true,
+		FieldsOrder:     []string{"component", "category"},
+	}
+	NfName := ParseNfName(os.Args[0])
+	Log = logg.WithFields(logrus.Fields{"component": "ONVMTRANS", "category": NfName})
+}
+
+func SetLogLevel(level logrus.Level) {
+	logg.SetLevel(level)
+}
+
+func SetReportCaller(enable bool) {
+	logg.SetReportCaller(enable)
+}
+
+func ParseNfName(args string) string {
+	nfName := strings.Split(args, "/")
+	return nfName[1]
+}
+
 var (
 	upgradePreface = []byte(ClientPreface)
 )
@@ -73,7 +117,7 @@ func EncodeRequest(req *http.Request) ([]byte, error) {
 
 	body_buf := make([]byte, req.ContentLength)
 	req.Body.Read(body_buf)
-	fmt.Printf("Before encode:\n Request:\n%+v Body:\n%+v\n", req, body_buf)
+	Log.Tracef("Before encode:\n Request:\n%+v Body:\n%+v\n", req, body_buf)
 
 	req_wrapper := RequestWrapper{Request: req, Body: body_buf}
 	req_wrapper.Request.Body = nil
@@ -90,7 +134,7 @@ func DecodeRequest(buf []byte) (*RequestWrapper, error) {
 
 	dec := gob.NewDecoder(bytes.NewReader(buf))
 	err := dec.Decode(&req_wrapper)
-	fmt.Printf("After dencode:\n Request:\n%+v Body:\n%+v\n", req_wrapper.Request, req_wrapper.Body)
+	Log.Tracef("After dencode:\n Request:\n%+v Body:\n%+v\n", req_wrapper.Request, req_wrapper.Body)
 
 	return &req_wrapper, err
 }
@@ -109,6 +153,7 @@ type OnvmClientConn struct {
 }
 
 func (occ *OnvmClientConn) WriteClientPreface() {
+	Log.Traceln("nycu-ucr/net/http2/onvm_transport, WriteClientPreface()")
 	_, err := occ.conn.Write(upgradePreface)
 	if err != nil {
 
@@ -116,6 +161,7 @@ func (occ *OnvmClientConn) WriteClientPreface() {
 }
 
 func (occ *OnvmClientConn) WriteRequest(req *http.Request) error {
+	Log.Traceln("nycu-ucr/net/http2/onvm_transport, WriteRequest()")
 	b, err := EncodeRequest(req)
 	occ.conn.Write(b)
 
@@ -123,8 +169,17 @@ func (occ *OnvmClientConn) WriteRequest(req *http.Request) error {
 }
 
 func (occ *OnvmClientConn) ReadResponse() (*http.Response, error) {
-	buf := make([]byte, 16<<10)
-	occ.conn.Read(buf)
+	Log.Traceln("nycu-ucr/net/http2/onvm_transport, ReadResponse()")
+	buf := make([]byte, 10240)
+	Log.Traceln("nycu-ucr/net/http2/onvm_transport, ReadResponse()-> Before read")
+	n, err := occ.conn.Read(buf)
+	if err != nil {
+		Log.Errorf("nycu-ucr/net/http2/onvm_transport, ReadResponse()->Read error: %+v", err)
+		time.Sleep(30 * time.Second)
+		return nil, err
+	}
+	Log.Traceln("nycu-ucr/net/http2/onvm_transport, ReadResponse()-> After read")
+	Log.Tracef("nycu-ucr/net/http2/onvm_transport, ReadResponse()->Read: %dbytes", n)
 	resp_wrapper, err := DecodeResponse(buf)
 	resp_wrapper.Response.Body = io.NopCloser(bytes.NewBuffer(resp_wrapper.Body))
 
@@ -166,10 +221,10 @@ func (ot *OnvmTransport) GetConn(req *http.Request) (*OnvmClientConn, error) {
 	var conn net.Conn
 	var err error
 	if ot.UseONVM {
-		fmt.Println("nycu-ucr/net/http2/onvm_transport, use ONVM")
+		Log.Infoln("nycu-ucr/net/http2/onvm_transport, use ONVM")
 		conn, err = onvmpoller.DialONVM("onvm", req.Host)
 	} else {
-		fmt.Println("nycu-ucr/net/http2/onvm_transport, use TCP")
+		Log.Infoln("nycu-ucr/net/http2/onvm_transport, use TCP")
 		conn, err = net.Dial("tcp", req.Host)
 	}
 	if err != nil {

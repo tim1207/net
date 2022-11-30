@@ -1,30 +1,39 @@
 package http2
 
 import (
+	"bytes"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"math"
 	"net"
+	"runtime"
 	"time"
 
+	"github.com/nycu-ucr/gonet/http"
 	"github.com/nycu-ucr/net/http2/hpack"
 )
 
-// ServeConn serves HTTP/2 requests on the provided connection and
-// blocks until the connection is no longer readable.
-//
-// ServeConn starts speaking HTTP/2 assuming that c has not had any
-// reads or writes. It writes its initial settings frame and expects
-// to be able to read the preface and settings frame from the
-// client. If c has a ConnectionState method like a *tls.Conn, the
-// ConnectionState is used to verify the TLS ciphersuite and to set
-// the Request.TLS field in Handlers.
-//
-// ServeConn does not support h2c by itself. Any h2c support must be
-// implemented in terms of providing a suitably-behaving net.Conn.
-//
-// The opts parameter is optional. If nil, default values are used.
+/*
+type ResponseWriter interface {
+	Header() Header
+
+	Write([]byte) (int, error)
+
+	WriteHeader(statusCode int)
+}
+
+func (*ResponseWriter).CloseNotify() <-chan bool
+func (*ResponseWriter).Flush()
+func (*ResponseWriter).Header() http.Header
+func (*ResponseWriter).Push(target string, opt *http.PushOptions) error
+func (*ResponseWriter).Write(p []byte) (n int, err error)
+func (*ResponseWriter).WriteHeader(code int)
+func (*ResponseWriter).WriteString(s string) (n int, err error)
+*/
+
 func (s *Server) ServeOnvmConn(c net.Conn, opts *ServeConnOpts) {
+	fmt.Println("nycu-ucr/net/http2/server.go/ServeOnvmConn")
 	baseCtx, cancel := serverConnBaseContext(c, opts)
 	defer cancel()
 
@@ -155,20 +164,62 @@ func (s *Server) ServeOnvmConn(c net.Conn, opts *ServeConnOpts) {
 	}
 
 	buff := make([]byte, 10240)
+	time.Sleep(1 * time.Second)
 	n, err := sc.conn.Read(buff)
 
 	if err != nil {
-		println("x/net/http2/server.go/ServeConn: net.Conn.Read -> %d bytes", n)
+		fmt.Printf("nycu-ucr/net/http2/server.go/ServeOnvmConn: net.Conn.Read error -> %+v\n", err)
 	}
-	println("x/net/http2/server.go/ServeConn: net.Conn.Read error -> %+v", err)
+	fmt.Printf("nycu-ucr/net/http2/server.go/ServeOnvmConn: net.Conn.Read -> %d bytes\n", n)
 
 	req, err := DecodeRequest(buff)
 
-	st := sc.newStream(0, 0, stateOpen)
+	// st := sc.newStream(0, 0, stateOpen)
+	req.Request.Body = io.NopCloser(bytes.NewReader(req.Body))
 
-	rw := sc.newResponseWriter(st, req.Request)
+	rw := sc.onvm_newResponseWriter(req.Request)
 
-	sc.runHandler(rw, req.Request, sc.handler.ServeHTTP)
+	sc.onvm_runHandler(rw, req.Request, sc.handler.ServeHTTP)
 
 	// sc.serve()
+}
+
+func (sc *serverConn) onvm_newResponseWriter(req *http.Request) *responseWriter {
+	rws := responseWriterStatePool.Get().(*responseWriterState)
+	bwSave := rws.bw
+	*rws = responseWriterState{} // zero all the fields
+	rws.conn = sc
+	rws.bw = bwSave
+	rws.bw.Reset(chunkWriter{rws})
+	rws.stream = nil
+	rws.req = req
+	return &responseWriter{rws: rws}
+}
+
+func (sc *serverConn) onvm_runHandler(rw *responseWriter, req *http.Request, handler func(http.ResponseWriter, *http.Request)) {
+	didPanic := true
+	defer func() {
+		rw.rws.stream.cancelCtx()
+		if req.MultipartForm != nil {
+			req.MultipartForm.RemoveAll()
+		}
+		if didPanic {
+			e := recover()
+			sc.writeFrameFromHandler(FrameWriteRequest{
+				write:  handlerPanicRST{rw.rws.stream.id},
+				stream: rw.rws.stream,
+			})
+			// Same as net/http:
+			if e != nil && e != http.ErrAbortHandler {
+				const size = 64 << 10
+				buf := make([]byte, size)
+				buf = buf[:runtime.Stack(buf, false)]
+				sc.logf("http2: panic serving %v: %v\n%s", sc.conn.RemoteAddr(), e, buf)
+			}
+			return
+		}
+		rw.handlerDone()
+	}()
+	handler(rw, req)
+	didPanic = false
 }

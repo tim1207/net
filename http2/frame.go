@@ -513,7 +513,7 @@ func (fr *Framer) ReadFrame() (Frame, error) {
 	t4 := time.Now()
 	sum += t4.Sub(t1).Seconds()
 	// fmt.Printf("ReadFrame, \u001b[32mHeader+Payload\u001b[0m: %v (second)\n", t4.Sub(t1).Seconds())
-	fmt.Printf("ReadFrame, \u001b[32mAccumulated Sum\u001b[0m: %.6f (second)\n", sum)
+	// fmt.Printf("ReadFrame, \u001b[32mAccumulated Sum\u001b[0m: %.6f (second)\n", sum)
 	f, err := typeFrameParser(fh.Type)(fr.frameCache, fh, fr.countError, payload)
 	if err != nil {
 		if ce, ok := err.(connError); ok {
