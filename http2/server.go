@@ -2671,6 +2671,7 @@ func (rws *responseWriterState) promoteUndeclaredTrailers() {
 }
 
 func (w *responseWriter) Flush() {
+	println("nycu-ucr/net/http2/server.go, (*responseWriter).Flush")
 	rws := w.rws
 	if rws == nil {
 		panic("Header called after Handler finished")
@@ -2690,6 +2691,7 @@ func (w *responseWriter) Flush() {
 }
 
 func (w *responseWriter) CloseNotify() <-chan bool {
+	println("nycu-ucr/net/http2/server.go, (*responseWriter).CloseNotify")
 	rws := w.rws
 	if rws == nil {
 		panic("CloseNotify called after Handler finished")
@@ -2710,6 +2712,7 @@ func (w *responseWriter) CloseNotify() <-chan bool {
 }
 
 func (w *responseWriter) Header() http.Header {
+	println("nycu-ucr/net/http2/server.go, (*responseWriter).Header")
 	rws := w.rws
 	if rws == nil {
 		panic("Header called after Handler finished")
@@ -2738,6 +2741,7 @@ func checkWriteHeaderCode(code int) {
 }
 
 func (w *responseWriter) WriteHeader(code int) {
+	println("nycu-ucr/net/http2/server.go, (*responseWriter).WriteHeader")
 	rws := w.rws
 	if rws == nil {
 		panic("WriteHeader called after Handler finished")
@@ -2803,15 +2807,18 @@ func cloneHeader(h http.Header) http.Header {
 // * -> responseWriterState.writeChunk(p []byte)
 // * -> responseWriterState.writeChunk (most of the magic; see comment there)
 func (w *responseWriter) Write(p []byte) (n int, err error) {
+	println("nycu-ucr/net/http2/server.go, (*responseWriter).bigWrite")
 	return w.write(len(p), p, "")
 }
 
 func (w *responseWriter) WriteString(s string) (n int, err error) {
+	println("nycu-ucr/net/http2/server.go, (*responseWriter).WriteString")
 	return w.write(len(s), nil, s)
 }
 
 // either dataB or dataS is non-zero.
 func (w *responseWriter) write(lenData int, dataB []byte, dataS string) (n int, err error) {
+	println("nycu-ucr/net/http2/server.go, (*responseWriter).littlewrite")
 	rws := w.rws
 	if rws == nil {
 		panic("Write called after Handler finished")
@@ -2836,6 +2843,7 @@ func (w *responseWriter) write(lenData int, dataB []byte, dataS string) (n int, 
 }
 
 func (w *responseWriter) handlerDone() {
+	println("nycu-ucr/net/http2/server.go, (*responseWriter).handlerDone")
 	rws := w.rws
 	dirty := rws.dirty
 	rws.handlerDone = true
@@ -2861,6 +2869,7 @@ var (
 var _ http.Pusher = (*responseWriter)(nil)
 
 func (w *responseWriter) Push(target string, opts *http.PushOptions) error {
+	println("nycu-ucr/net/http2/server.go, (*responseWriter).Push")
 	st := w.rws.stream
 	sc := st.sc
 	sc.serveG.checkNotOn()

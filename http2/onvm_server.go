@@ -33,7 +33,7 @@ func (*ResponseWriter).WriteString(s string) (n int, err error)
 */
 
 func (s *Server) ServeOnvmConn(c net.Conn, opts *ServeConnOpts) {
-	fmt.Println("nycu-ucr/net/http2/server.go/ServeOnvmConn")
+	fmt.Println("nycu-ucr/net/http2/onvm_server.go/ServeOnvmConn")
 	baseCtx, cancel := serverConnBaseContext(c, opts)
 	defer cancel()
 
@@ -164,7 +164,6 @@ func (s *Server) ServeOnvmConn(c net.Conn, opts *ServeConnOpts) {
 	}
 
 	buff := make([]byte, 10240)
-	time.Sleep(1 * time.Second)
 	n, err := sc.conn.Read(buff)
 
 	if err != nil {
@@ -177,14 +176,17 @@ func (s *Server) ServeOnvmConn(c net.Conn, opts *ServeConnOpts) {
 	// st := sc.newStream(0, 0, stateOpen)
 	req.Request.Body = io.NopCloser(bytes.NewReader(req.Body))
 
-	rw := sc.onvm_newResponseWriter(req.Request)
+	// rw := sc.onvm_newResponseWriter(req.Request)
+	onvmrw := sc.newOnvmResponseWriter(req.Request)
 
-	sc.onvm_runHandler(rw, req.Request, sc.handler.ServeHTTP)
+	// sc.onvm_runHandler(rw, req.Request, sc.handler.ServeHTTP)
+	sc.onvmRunHandler(onvmrw, req.Request, sc.handler.ServeHTTP)
 
 	// sc.serve()
 }
 
 func (sc *serverConn) onvm_newResponseWriter(req *http.Request) *responseWriter {
+	sc.logf("nycu-ucr/net/http2/onvm_server.go/onvm_newResponseWriter")
 	rws := responseWriterStatePool.Get().(*responseWriterState)
 	bwSave := rws.bw
 	*rws = responseWriterState{} // zero all the fields
@@ -222,4 +224,95 @@ func (sc *serverConn) onvm_runHandler(rw *responseWriter, req *http.Request, han
 	}()
 	handler(rw, req)
 	didPanic = false
+}
+
+type onvmresponseWriter struct {
+	rws *onvmresponseWriterState
+}
+
+type onvmresponseWriterState struct {
+	req  *http.Request
+	conn *serverConn
+
+	// mutated by http.Handler goroutine:
+	handlerHeader http.Header // nil until called
+	snapHeader    http.Header // snapshot of handlerHeader at WriteHeader time
+	trailers      []string    // set in writeChunk
+	status        int         // status code passed to WriteHeader
+	wroteHeader   bool        // WriteHeader called (explicitly or implicitly). Not necessarily sent to user yet.
+	sentHeader    bool        // have we sent the header frame?
+	handlerDone   bool        // handler has finished
+
+	sentContentLen int64 // non-zero if handler set a Content-Length header
+	wroteBytes     int64
+}
+
+func (sc *serverConn) newOnvmResponseWriter(req *http.Request) *onvmresponseWriter {
+	sc.logf("nycu-ucr/net/http2/onvm_server.go/newOnvmResponseWriter")
+	rws := new(onvmresponseWriterState)
+	rws.conn = sc
+	rws.req = req
+	return &onvmresponseWriter{rws: rws}
+}
+
+func (sc *serverConn) onvmRunHandler(onvmrw *onvmresponseWriter, req *http.Request, handler func(http.ResponseWriter, *http.Request)) {
+	sc.logf("nycu-ucr/net/http2/onvm_server.go/onvmRunHandler [Start]\n")
+	didPanic := true
+	defer func() {
+		if didPanic {
+			e := recover()
+			// Same as net/http:
+			if e != nil && e != http.ErrAbortHandler {
+				const size = 64 << 10
+				buf := make([]byte, size)
+				buf = buf[:runtime.Stack(buf, false)]
+				sc.logf("nycu-ucr/net/http2/onvm_server.go/onvmRunHandler panic serving %v: %v\n%s", sc.conn.RemoteAddr(), e, buf)
+			}
+			return
+		}
+		onvmrw.rws.handlerDone = true
+	}()
+	handler(onvmrw, req)
+	didPanic = false
+	sc.logf("nycu-ucr/net/http2/onvm_server.go/onvmRunHandler [End]\n")
+}
+
+func (w *onvmresponseWriter) Header() http.Header {
+	println("nycu-ucr/net/http2/server.go, (*onvmresponseWriter).Header")
+	rws := w.rws
+	if rws == nil {
+		panic("Header called after Handler finished")
+	}
+	if rws.handlerHeader == nil {
+		rws.handlerHeader = make(http.Header)
+	}
+	return rws.handlerHeader
+}
+
+func (w *onvmresponseWriter) WriteHeader(code int) {
+	println("nycu-ucr/net/http2/server.go, (*onvmresponseWriter).WriteHeader")
+	rws := w.rws
+	if rws == nil {
+		panic("WriteHeader called after Handler finished")
+	}
+	rws.status = code
+}
+
+func (w *onvmresponseWriter) Write(p []byte) (n int, err error) {
+	println("nycu-ucr/net/http2/server.go, (*onvmresponseWriter).Write")
+	rws := w.rws
+	if rws == nil {
+		panic("Write called after Handler finished")
+	}
+	if !rws.wroteHeader {
+		w.WriteHeader(200)
+	}
+	if !bodyAllowedForStatus(rws.status) {
+		return 0, http.ErrBodyNotAllowed
+	}
+
+	rws.conn.logf("nycu-ucr/net/http2/server.go, (*onvmresponseWriter).Write:\n%s\n", string(p))
+	n, err = rws.conn.conn.Write(p)
+
+	return
 }

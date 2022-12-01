@@ -115,11 +115,16 @@ type ResponseWrapper struct {
 func EncodeRequest(req *http.Request) ([]byte, error) {
 	var buf bytes.Buffer
 
+	req_wrapper := RequestWrapper{Request: req}
 	body_buf := make([]byte, req.ContentLength)
-	req.Body.Read(body_buf)
+
+	Log.Traceln("Before read request Body\n")
+	if req.Body != nil {
+		req.Body.Read(body_buf)
+		req_wrapper.Body = body_buf
+	}
 	Log.Tracef("Before encode:\n Request:\n%+v Body:\n%+v\n", req, body_buf)
 
-	req_wrapper := RequestWrapper{Request: req, Body: body_buf}
 	req_wrapper.Request.Body = nil
 	req_wrapper.Request.GetBody = nil
 
@@ -150,20 +155,24 @@ func DecodeResponse(buf []byte) (*ResponseWrapper, error) {
 
 type OnvmClientConn struct {
 	conn net.Conn
+	req  *http.Request
 }
 
-func (occ *OnvmClientConn) WriteClientPreface() {
+func (occ *OnvmClientConn) WriteClientPreface() error {
 	Log.Traceln("nycu-ucr/net/http2/onvm_transport, WriteClientPreface()")
 	_, err := occ.conn.Write(upgradePreface)
-	if err != nil {
-
-	}
+	return err
 }
 
 func (occ *OnvmClientConn) WriteRequest(req *http.Request) error {
 	Log.Traceln("nycu-ucr/net/http2/onvm_transport, WriteRequest()")
+	occ.req = req
 	b, err := EncodeRequest(req)
-	occ.conn.Write(b)
+	if err != nil {
+		Log.Errorf("nycu-ucr/net/http2/onvm_transport, EncodeRequest err: %+v", err)
+		return err
+	}
+	_, err = occ.conn.Write(b)
 
 	return err
 }
@@ -171,19 +180,28 @@ func (occ *OnvmClientConn) WriteRequest(req *http.Request) error {
 func (occ *OnvmClientConn) ReadResponse() (*http.Response, error) {
 	Log.Traceln("nycu-ucr/net/http2/onvm_transport, ReadResponse()")
 	buf := make([]byte, 10240)
-	Log.Traceln("nycu-ucr/net/http2/onvm_transport, ReadResponse()-> Before read")
 	n, err := occ.conn.Read(buf)
 	if err != nil {
 		Log.Errorf("nycu-ucr/net/http2/onvm_transport, ReadResponse()->Read error: %+v", err)
-		time.Sleep(30 * time.Second)
 		return nil, err
 	}
-	Log.Traceln("nycu-ucr/net/http2/onvm_transport, ReadResponse()-> After read")
 	Log.Tracef("nycu-ucr/net/http2/onvm_transport, ReadResponse()->Read: %dbytes", n)
-	resp_wrapper, err := DecodeResponse(buf)
-	resp_wrapper.Response.Body = io.NopCloser(bytes.NewBuffer(resp_wrapper.Body))
+	// resp_wrapper, err := DecodeResponse(buf)
 
-	return resp_wrapper.Response, err
+	return occ.makeHttpResponse(buf, n)
+}
+
+func (occ *OnvmClientConn) makeHttpResponse(b []byte, n int) (*http.Response, error) {
+	Log.Traceln("nycu-ucr/net/http2/onvm_transport, makeHttpResponse()")
+	rsp := new(http.Response)
+	rsp.Request = occ.req
+	rsp.Status = ""
+	rsp.Proto = "HTTP/2.0"
+	rsp.ProtoMajor = 2
+	rsp.ProtoMinor = 0
+	rsp.Body = io.NopCloser(bytes.NewBuffer(b[:n]))
+
+	return rsp, nil
 }
 
 func (occ *OnvmClientConn) Close() {
@@ -200,21 +218,34 @@ func (ot *OnvmTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Get Connection
 	occ, err := ot.GetConn(req)
 	if err != nil {
+		Log.Errorf("nycu-ucr/net/http2/onvm_transport, GetConn err: %+v", err)
 		return nil, err
 	}
 	defer occ.Close()
 
 	// Send Client Preface
-	occ.WriteClientPreface()
+	err = occ.WriteClientPreface()
+	if err != nil {
+		Log.Errorf("nycu-ucr/net/http2/onvm_transport, WriteClientPreface err: %+v", err)
+		return nil, err
+	}
 
 	// Send Request
 	err = occ.WriteRequest(req)
 	if err != nil {
+		Log.Errorf("nycu-ucr/net/http2/onvm_transport, WriteRequest err: %+v", err)
 		return nil, err
 	}
 
 	// Read Response
-	return occ.ReadResponse()
+	rsp, err := occ.ReadResponse()
+	if err != nil {
+		Log.Errorln("nycu-ucr/net/http2/onvm_transport, RoundTrip not success")
+	} else {
+		Log.Traceln("nycu-ucr/net/http2/onvm_transport, RoundTrip success")
+	}
+
+	return rsp, err
 }
 
 func (ot *OnvmTransport) GetConn(req *http.Request) (*OnvmClientConn, error) {
