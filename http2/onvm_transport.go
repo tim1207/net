@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	LOG_LEVEL = logrus.TraceLevel
+	LOG_LEVEL = logrus.InfoLevel
 )
 
 var (
@@ -41,7 +41,7 @@ func init() {
 		FieldsOrder:     []string{"component", "category"},
 	}
 	NfName := ParseNfName(os.Args[0])
-	Log = logg.WithFields(logrus.Fields{"component": "ONVMTRANS", "category": NfName})
+	Log = logg.WithFields(logrus.Fields{"component": "ONVM-http2", "category": NfName})
 }
 
 func SetLogLevel(level logrus.Level) {
@@ -183,7 +183,7 @@ func (occ *OnvmClientConn) WriteClientPreface() error {
 func (occ *OnvmClientConn) WriteRequest(req *http.Request) error {
 	Log.Traceln("nycu-ucr/net/http2/onvm_transport, WriteRequest()")
 	occ.req = req
-	b, err := EncodeRequest(req)
+	b, err := FastEncodeRequest(req)
 	if err != nil {
 		Log.Errorf("nycu-ucr/net/http2/onvm_transport, EncodeRequest err: %+v", err)
 		return err

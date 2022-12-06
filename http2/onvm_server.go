@@ -1,9 +1,7 @@
 package http2
 
 import (
-	"bytes"
 	"fmt"
-	"io"
 	"math"
 	"net"
 	"runtime"
@@ -170,16 +168,18 @@ func (s *Server) ServeOnvmConn(c net.Conn, opts *ServeConnOpts) {
 	}
 	fmt.Printf("nycu-ucr/net/http2/server.go/ServeOnvmConn: net.Conn.Read -> %d bytes\n", n)
 
-	req, err := DecodeRequest(buff)
+	req, err := FastDecodeRequest(buff)
 
 	// st := sc.newStream(0, 0, stateOpen)
-	req.Request.Body = io.NopCloser(bytes.NewReader(req.Body))
+	// req.Request.Body = io.NopCloser(bytes.NewReader(req.Body))
 
 	// rw := sc.onvm_newResponseWriter(req.Request)
-	onvmrw := sc.newOnvmResponseWriter(req.Request)
+	// onvmrw := sc.newOnvmResponseWriter(req.Request)
+	onvmrw := sc.newOnvmResponseWriter(req)
 
 	// sc.onvm_runHandler(rw, req.Request, sc.handler.ServeHTTP)
-	sc.onvmRunHandler(onvmrw, req.Request, sc.handler.ServeHTTP)
+	// sc.onvmRunHandler(onvmrw, req.Request, sc.handler.ServeHTTP)
+	sc.onvmRunHandler(onvmrw, req, sc.handler.ServeHTTP)
 
 	// sc.serve()
 }

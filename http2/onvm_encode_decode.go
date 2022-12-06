@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"net/url"
 
 	"github.com/nycu-ucr/gonet/http"
 )
@@ -84,7 +85,7 @@ const (
 
 /* Use for convert between request/response and []byte */
 type OnvmPDU struct {
-	Buffer  bytes.Buffer // read from conn or write to conn
+	Buffer  *bytes.Buffer // read from conn or write to conn
 	payload []byte
 }
 
@@ -131,13 +132,14 @@ func byteTouint32(b []byte) uint32 {
 }
 
 func (pdu *OnvmPDU) EncodeTLV(tag int8, data any) error {
+	Log.Traceln("nycu-ucr/net/http2/onvm_encode_decode, EncodeTLV")
 	buf := pdu.Buffer
 
 	// tag
 	bt := make([]byte, 1)
 	bt[0] = byte(tag)
 	if _, err := buf.Write(bt); err != nil {
-		fmt.Printf("[EncodeTLV]\nTag: %d\nError: %+v\n", tag, err)
+		Log.Errorf("[EncodeTLV]\nTag: %d\nError: %+v\n", tag, err)
 		return err
 	}
 
@@ -145,12 +147,12 @@ func (pdu *OnvmPDU) EncodeTLV(tag int8, data any) error {
 	switch v := data.(type) {
 	case string:
 		if _, err := buf.Write(uint32Tobyte(uint32(len(v)))); err != nil {
-			fmt.Printf("[EncodeTLV]\nValue: %s\nError: %+v\n", v, err)
+			Log.Errorf("[EncodeTLV]\nValue: %s\nError: %+v\n", v, err)
 			return err
 		}
 	case int64:
 		if _, err := buf.Write(uint32Tobyte(8)); err != nil {
-			fmt.Printf("[EncodeTLV]\nValue: %d\nError: %+v\n", v, err)
+			Log.Errorf("[EncodeTLV]\nValue: %d\nError: %+v\n", v, err)
 			return err
 		}
 	case int32:
@@ -159,8 +161,12 @@ func (pdu *OnvmPDU) EncodeTLV(tag int8, data any) error {
 			return err
 		}
 	case []byte:
+		/* When no Body exist, we still fill the payload tag and its length equeal 0, then return with no value */
+		if len(v) == 0 {
+			return nil
+		}
 		if _, err := buf.Write(uint32Tobyte(uint32(len(v)))); err != nil {
-			fmt.Printf("[EncodeTLV]\nValue: %d\nError: %+v\n", v, err)
+			Log.Errorf("[EncodeTLV]\nValue: %d\nError: %+v\n", v, err)
 			return err
 		}
 	}
@@ -169,22 +175,22 @@ func (pdu *OnvmPDU) EncodeTLV(tag int8, data any) error {
 	switch v := data.(type) {
 	case string:
 		if _, err := buf.Write([]byte(v)); err != nil {
-			fmt.Printf("[EncodeTLV]\nValue: %s\nError: %+v\n", v, err)
+			Log.Errorf("[EncodeTLV]\nValue: %s\nError: %+v\n", v, err)
 			return err
 		}
 	case int64:
 		if _, err := buf.Write(uint64Tobyte(uint64(v))); err != nil {
-			fmt.Printf("[EncodeTLV]\nValue: %d\nError: %+v\n", v, err)
+			Log.Errorf("[EncodeTLV]\nValue: %d\nError: %+v\n", v, err)
 			return err
 		}
 	case int32:
 		if _, err := buf.Write(uint32Tobyte(uint32(v))); err != nil {
-			fmt.Printf("[EncodeTLV]\nValue: %d\nError: %+v\n", v, err)
+			Log.Errorf("[EncodeTLV]\nValue: %d\nError: %+v\n", v, err)
 			return err
 		}
 	case []byte:
 		if _, err := buf.Write(v); err != nil {
-			fmt.Printf("[EncodeTLV]\nValue: %d\nError: %+v\n", v, err)
+			Log.Errorf("[EncodeTLV]\nValue: %d\nError: %+v\n", v, err)
 			return err
 		}
 	}
@@ -193,6 +199,7 @@ func (pdu *OnvmPDU) EncodeTLV(tag int8, data any) error {
 }
 
 func (pdu *OnvmPDU) DecodeTLV() (*TLV, error) {
+	Log.Traceln("nycu-ucr/net/http2/onvm_encode_decode, DecodeTLV")
 	var tlv TLV
 	buf := pdu.Buffer
 
@@ -200,7 +207,7 @@ func (pdu *OnvmPDU) DecodeTLV() (*TLV, error) {
 	bt := make([]byte, 1)
 	_, err := buf.Read(bt)
 	if err != nil {
-		fmt.Printf("[DecodeTLV][Read tag][Error]: %+v\n", err)
+		Log.Errorf("[DecodeTLV][Read tag][Error]: %+v\n", err)
 		return &tlv, err
 	}
 	tlv.Tag = int8(bt[0])
@@ -209,32 +216,33 @@ func (pdu *OnvmPDU) DecodeTLV() (*TLV, error) {
 	bl := make([]byte, 4)
 	_, err = buf.Read(bl)
 	if err != nil {
-		fmt.Printf("[DecodeTLV][Read length][Error]: %+v\n", err)
+		Log.Errorf("[DecodeTLV][Read length][Error]: %+v\n", err)
 		return &tlv, err
 	}
 	tlv.Length = byteTouint32(bl)
 
 	// value
-	bv := make([]byte, tlv.Length)
-	_, err = buf.Read(bv)
-	if err != nil {
-		fmt.Printf("[DecodeTLV][Read value][Error]: %+v\n", err)
-		return &tlv, err
-	}
-
-	switch tlv.Tag {
-	case STATUS:
-		// int32
-		tlv.Value = byteTouint32(bv)
-	case CONTENT_LEN:
-		//int64
-		tlv.Value = byteTouint64(bv)
-	case PAYLOAD:
-		// []byte
-		tlv.Value = bv
-	default:
-		//string
-		tlv.Value = string(bv)
+	if tlv.Length != 0 {
+		bv := make([]byte, tlv.Length)
+		_, err = buf.Read(bv)
+		if err != nil {
+			Log.Errorf("[DecodeTLV][Read value][Error]: %+v\n", err)
+			return &tlv, err
+		}
+		switch tlv.Tag {
+		case STATUS:
+			// int32
+			tlv.Value = byteTouint32(bv)
+		case CONTENT_LEN:
+			//int64
+			tlv.Value = byteTouint64(bv)
+		case PAYLOAD:
+			// []byte
+			tlv.Value = bv
+		default:
+			//string
+			tlv.Value = string(bv)
+		}
 	}
 
 	return &tlv, err
@@ -245,15 +253,20 @@ func (pdu *OnvmPDU) DecodeTLV() (*TLV, error) {
 *********************************/
 
 func FastEncodeRequest(req *http.Request) ([]byte, error) {
+	Log.Traceln("nycu-ucr/net/http2/onvm_encode_decode, FastEncodeRequest")
 	var err error
+	pdu := &OnvmPDU{
+		Buffer: new(bytes.Buffer),
+	}
 
-	pdu := new(OnvmPDU)
-	pdu.payload = make([]byte, req.ContentLength)
-	req.Body.Read(pdu.payload)
+	if req.ContentLength != 0 {
+		pdu.payload = make([]byte, req.ContentLength)
+		req.Body.Read(pdu.payload)
+	}
 
 	// TODO:
 	err = pdu.EncodeTLV(METHOD, req.Method)
-	err = pdu.EncodeTLV(URL, req.URL.Scheme)
+	err = pdu.EncodeTLV(URL, req.URL.String())
 	err = pdu.EncodeTLV(PAYLOAD, pdu.payload)
 	// etc ...
 
@@ -261,18 +274,27 @@ func FastEncodeRequest(req *http.Request) ([]byte, error) {
 }
 
 func FastDecodeRequest(buf []byte) (*http.Request, error) {
+	Log.Traceln("nycu-ucr/net/http2/onvm_encode_decode, FastDecodeRequest")
 	req := new(http.Request)
-	pdu := new(OnvmPDU)
+	pdu := &OnvmPDU{
+		Buffer: bytes.NewBuffer(buf),
+	}
 
 	// TODO:
 	tlv1, err := pdu.DecodeTLV() // METHOD
 	req.Method = tlv1.Value.(string)
 
 	tlv2, err := pdu.DecodeTLV() // URL
-	req.URL.Scheme = tlv2.Value.(string)
+	req.URL, err = url.Parse(tlv2.Value.(string))
 
 	tlv3, err := pdu.DecodeTLV() // PAYLOAD
-	req.Body = io.NopCloser(bytes.NewReader(tlv3.Value.([]byte)))
+	if tlv3.Length != 0 {
+		req.Body = io.NopCloser(bytes.NewReader(tlv3.Value.([]byte)))
+		req.ContentLength = int64(tlv3.Length)
+	} else {
+		req.Body = nil
+		req.ContentLength = 0
+	}
 	// etc ...
 
 	return req, err
