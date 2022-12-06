@@ -1,7 +1,9 @@
 package http2
 
 import (
+	"bufio"
 	"bytes"
+	"encoding/binary"
 	"encoding/gob"
 	"io"
 	"net"
@@ -14,49 +16,6 @@ import (
 	"github.com/nycu-ucr/onvmpoller"
 	"github.com/sirupsen/logrus"
 )
-
-// type SmallRequest struct {
-// 	Method           string
-// 	URL              *url.URL
-// 	Proto            string // "HTTP/1.0"
-// 	ProtoMajor       int    // 1
-// 	ProtoMinor       int    // 0
-// 	Header           http.Header
-// 	ContentLength    int64
-// 	Host             string
-// 	BodyByte         []byte
-// 	Close            bool
-// 	TransferEncoding []string
-// 	Form             url.Values
-// 	PostForm         url.Values
-// 	MultipartForm    *multipart.Form
-// 	Trailer          http.Header
-// 	RemoteAddr       string
-// 	RequestURI       string
-// 	TLS              *tls.ConnectionState
-// 	Cancel           <-chan struct{}
-// 	Response         *http.Response
-// 	// ctx              context.Context
-// 	// GetBody       func() (io.ReadCloser, error)
-// 	// Body          io.ReadCloser
-// }
-
-// type Response struct {
-// 	Status           string // e.g. "200 OK"
-// 	StatusCode       int    // e.g. 200
-// 	Proto            string // e.g. "HTTP/1.0"
-// 	ProtoMajor       int    // e.g. 1
-// 	ProtoMinor       int    // e.g. 0
-// 	Header           Header
-// 	Body             io.ReadCloser
-// 	ContentLength    int64
-// 	TransferEncoding []string
-// 	Close            bool
-// 	Uncompressed     bool
-// 	Trailer          Header
-// 	Request          *Request
-// 	TLS              *tls.ConnectionState
-// }
 
 const (
 	LOG_LEVEL = logrus.TraceLevel
@@ -112,6 +71,63 @@ type ResponseWrapper struct {
 	Body []byte
 }
 
+func EncodeRequest2(req *http.Request) ([]byte, error) {
+	var length uint32
+	var buf bytes.Buffer
+	w := bufio.NewWriter(&buf)
+
+	// Write URL
+	url_s := req.URL.String()
+	length = uint32(len(url_s))
+	binary.Write(w, binary.LittleEndian, length)
+	w.Write([]byte(url_s))
+
+	if req.ContentLength != 0 {
+		// Write content length
+		buf_body := make([]byte, req.ContentLength)
+		req.Body.Read(buf_body)
+
+		length = uint32(req.ContentLength)
+		binary.Write(w, binary.LittleEndian, length)
+		w.Write(buf_body)
+	}
+
+	err := w.Flush()
+	return buf.Bytes(), err
+}
+
+func DecodeRequest2(buf []byte) (*http.Request, error) {
+	var length uint32
+	var err error
+	var buf_body []byte
+	r := bytes.NewReader(buf)
+
+	// Read URL
+	binary.Read(r, binary.LittleEndian, &length)
+	buf_url := make([]byte, length)
+	r.Read(buf_url)
+
+	// Read payload, if it has
+	err = binary.Read(r, binary.LittleEndian, &length)
+	if err != io.EOF {
+		buf_body = make([]byte, length)
+		r.Read(buf_body)
+		Log.Infof("DecodeRequest2, payload, %d, %v", length, string(buf_body))
+	}
+
+	var req *http.Request
+	if len(buf_body) != 0 {
+		req, err = http.NewRequest("POST", string(buf_url), bytes.NewReader(buf_body))
+	} else {
+		req, err = http.NewRequest("GET", string(buf_url), nil)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 func EncodeRequest(req *http.Request) ([]byte, error) {
 	var buf bytes.Buffer
 
@@ -139,7 +155,7 @@ func DecodeRequest(buf []byte) (*RequestWrapper, error) {
 
 	dec := gob.NewDecoder(bytes.NewReader(buf))
 	err := dec.Decode(&req_wrapper)
-	Log.Tracef("After dencode:\n Request:\n%+v Body:\n%+v\n", req_wrapper.Request, req_wrapper.Body)
+	Log.Tracef("After decode:\n Request:\n%+v Body:\n%+v\n", req_wrapper.Request, req_wrapper.Body)
 
 	return &req_wrapper, err
 }
@@ -262,29 +278,5 @@ func (ot *OnvmTransport) GetConn(req *http.Request) (*OnvmClientConn, error) {
 		return nil, err
 	}
 
-	return &OnvmClientConn{conn: conn}, err
-}
-
-func WriteHeader(req *http.Request) {}
-
-func WriteData(req *http.Request) {}
-
-func WriteRequest(req *http.Request) {
-	// Generate Header
-
-	WriteHeader(req)
-
-	if req.Body != nil {
-		WriteData(req)
-	}
-}
-
-func ReadFrame() {}
-
-func ReadResponse() (resp *http.Response, err error) {
-	// Read Frame
-
-	// Parse Frame
-
-	return
+	return &OnvmClientConn{conn: conn, req: req}, err
 }
