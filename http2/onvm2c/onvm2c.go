@@ -56,7 +56,7 @@ type onvmHandler struct {
 // the Handler is called. To limit the memory consumed by this request, wrap
 // the result of NewHandler in an http.MaxBytesHandler.
 func NewHandler(h http.Handler, s *http2.Server) http.Handler {
-	println("nycu-ucr/net/http2/onvm2c.go: you are using onvmHandler")
+	http2.Log.Traceln("nycu-ucr/net/http2/onvm2c.go: you are using onvmHandler")
 	return &onvmHandler{
 		Handler: h,
 		s:       s,
@@ -76,7 +76,7 @@ func extractServer(r *http.Request) *http.Server {
 func (s onvmHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Handle h2c with prior knowledge (RFC 7540 Section 3.4)
 	if r.Method == "PRI" && len(r.Header) == 0 && r.URL.Path == "*" && r.Proto == "HTTP/2.0" {
-		println("nycu-ucr/net/http2/onvm2c.go: handle h2c with prior knowledge")
+		http2.Log.Traceln("nycu-ucr/net/http2/onvm2c.go: handle h2c with prior knowledge")
 		if http2VerboseLogs {
 			log.Print("h2c: attempting h2c with prior knowledge.")
 		}
@@ -98,7 +98,7 @@ func (s onvmHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	// Handle Upgrade to h2c (RFC 7540 Section 3.2)
 	if isH2CUpgrade(r.Header) {
-		println("nycu-ucr/net/http2/onvm2c.go: handle upgrade to h2c")
+		http2.Log.Traceln("nycu-ucr/net/http2/onvm2c.go: handle upgrade to h2c")
 		conn, settings, err := h2cUpgrade(w, r)
 		if err != nil {
 			if http2VerboseLogs {
@@ -116,7 +116,7 @@ func (s onvmHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	println("nycu-ucr/net/http2/onvm2c.go: no upgrade to http2")
+	http2.Log.Traceln("nycu-ucr/net/http2/onvm2c.go: no upgrade to http2")
 	s.Handler.ServeHTTP(w, r)
 	return
 }
