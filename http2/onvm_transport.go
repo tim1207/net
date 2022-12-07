@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	LOG_LEVEL  = logrus.InfoLevel
+	LOG_LEVEL  = logrus.WarnLevel
 	STATE_IDLE = iota
 	STATE_BUSY
 	STATE_CLOSED
@@ -247,14 +247,7 @@ func (ot *OnvmTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		Log.Errorf("nycu-ucr/net/http2/onvm_transport, GetConn err: %+v", err)
 		return nil, err
 	}
-	defer occ.Close() // TODO: Remove it
-
-	// Send Client Preface
-	err = occ.WriteClientPreface()
-	if err != nil {
-		Log.Errorf("nycu-ucr/net/http2/onvm_transport, WriteClientPreface err: %+v", err)
-		return nil, err
-	}
+	// defer occ.Close() // TODO: Remove it
 
 	// Send Request
 	err = occ.WriteRequest(req)
@@ -279,6 +272,7 @@ func (ot *OnvmTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 func (ot *OnvmTransport) GetConn(req *http.Request) (*OnvmClientConn, error) {
 	addr := authorityAddr(req.URL.Scheme, req.URL.Host)
+	Log.Warnf("authorityAddr: %s", addr)
 	occ, err := ot.connPool().GetClientConn(req, addr)
 	if err != nil {
 		return nil, err
@@ -331,7 +325,9 @@ func (p *onvmClientConnPool) GetClientConn(req *http.Request, addr string) (*Onv
 	// Find an idle connection
 	p.mu.Lock()
 	for _, occ := range p.conns[addr] {
+		Log.Warnln("Find conn from pool")
 		if occ.state == STATE_IDLE {
+			Log.Warnln("Get conn from pool")
 			p.mu.Unlock()
 			return occ, nil
 		}
@@ -341,6 +337,14 @@ func (p *onvmClientConnPool) GetClientConn(req *http.Request, addr string) (*Onv
 	// Dial an new connection
 	occ, err := p.ot.DialConn(req)
 	if err != nil {
+		return nil, err
+	}
+	Log.Warnln("Get conn from dial")
+
+	// Send Client Preface
+	err = occ.WriteClientPreface()
+	if err != nil {
+		Log.Errorf("nycu-ucr/net/http2/onvm_transport, WriteClientPreface err: %+v", err)
 		return nil, err
 	}
 

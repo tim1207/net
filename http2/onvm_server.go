@@ -2,6 +2,7 @@ package http2
 
 import (
 	"context"
+	"io"
 	"net"
 	"runtime"
 
@@ -30,21 +31,22 @@ func (*ResponseWriter).WriteString(s string) (n int, err error)
 
 type onvmConn struct {
 	// Immutable:
-	srv              *Server
-	hs               *http.Server
-	conn             net.Conn
-	handler          http.Handler
-	baseCtx          context.Context
-	doneServing      chan struct{}          // closed when serverConn.serve ends
-	readFrameCh      chan readFrameResult   // written by serverConn.readFrames
-	wantWriteFrameCh chan FrameWriteRequest // from handlers -> serve
-	wroteFrameCh     chan frameWriteResult  // from writeFrameAsync -> serve, tickles more frame writes
-	bodyReadCh       chan bodyReadMsg       // from handlers -> serve
-	serveMsgCh       chan interface{}       // misc messages & code to send to / run on the serve loop
-	remoteAddrStr    string
+	srv           *Server
+	hs            *http.Server
+	conn          net.Conn
+	handler       http.Handler
+	baseCtx       context.Context
+	remoteAddrStr string
+	// doneServing      chan struct{}          // closed when serverConn.serve ends
+	// readFrameCh      chan readFrameResult   // written by serverConn.readFrames
+	// wantWriteFrameCh chan FrameWriteRequest // from handlers -> serve
+	// wroteFrameCh     chan frameWriteResult  // from writeFrameAsync -> serve, tickles more frame writes
+	// bodyReadCh       chan bodyReadMsg       // from handlers -> serve
+	// serveMsgCh       chan interface{}       // misc messages & code to send to / run on the serve loop
 	/* Test */
 	handlerPanicCh chan struct{}
-	readConnErrCh  chan struct{}
+	readConnErrCh  chan error
+	reqDecodeErrCh chan error
 	httpRequestCh  chan *http.Request
 }
 
@@ -67,50 +69,84 @@ func (s *Server) ServeOnvmConn(c net.Conn, opts *ServeConnOpts) {
 		// bodyReadCh:       make(chan bodyReadMsg),         // buffering doesn't matter either way
 		// doneServing:      make(chan struct{}),
 		handlerPanicCh: make(chan struct{}),
-		readConnErrCh:  make(chan struct{}),
+		readConnErrCh:  make(chan error),
+		reqDecodeErrCh: make(chan error),
 		httpRequestCh:  make(chan *http.Request, 1),
 	}
 
-	buff := make([]byte, 10240)
-	n, err := oc.conn.Read(buff)
+	// buff := make([]byte, 10240)
+	// n, err := oc.conn.Read(buff)
 
-	if err != nil {
-		Log.Errorf("nycu-ucr/net/http2/server.go/ServeOnvmConn: net.Conn.Read error -> %+v\n", err)
-	}
-	Log.Tracef("nycu-ucr/net/http2/server.go/ServeOnvmConn: net.Conn.Read -> %d bytes\n", n)
+	// if err != nil {
+	// 	Log.Errorf("nycu-ucr/net/http2/server.go/ServeOnvmConn: net.Conn.Read error -> %+v\n", err)
+	// }
+	// Log.Tracef("nycu-ucr/net/http2/server.go/ServeOnvmConn: net.Conn.Read -> %d bytes\n", n)
 
-	req, err := FastDecodeRequest(buff)
+	// req, err := FastDecodeRequest(buff)
 
 	// st := sc.newStream(0, 0, stateOpen)
 	// req.Request.Body = io.NopCloser(bytes.NewReader(req.Body))
 
 	// rw := sc.onvm_newResponseWriter(req.Request)
 	// onvmrw := sc.newOnvmResponseWriter(req.Request)
-	onvmrw := oc.newOnvmResponseWriter(req)
+	// onvmrw := oc.newOnvmResponseWriter(req)
 
 	// sc.onvm_runHandler(rw, req.Request, sc.handler.ServeHTTP)
 	// sc.onvmRunHandler(onvmrw, req.Request, sc.handler.ServeHTTP)
-	oc.onvmRunHandler(onvmrw, req, oc.handler.ServeHTTP)
+	// oc.onvmRunHandler(onvmrw, req, oc.handler.ServeHTTP)
 
-	// sc.serve()
+	oc.serve()
 	Log.Infoln("nycu-ucr/net/http2/server.go/ServeOnvmConn [Done]")
 }
 
-// func (oc *onvmConn) readRequest() {
-// 	for {
-// 		buff := make([]byte, 10240)
-// 		n, err := oc.conn.Read(buff)
+func (oc *onvmConn) serve() {
+	defer oc.conn.Close()
 
-// 		if err != nil {
-// 			Log.Errorf("nycu-ucr/net/http2/server.go/ServeOnvmConn: net.Conn.Read error -> %+v\n", err)
-// 			oc.readConnErrCh <- struct{}{}
-// 			return
-// 		}
-// 		Log.Tracef("nycu-ucr/net/http2/server.go/ServeOnvmConn: net.Conn.Read -> %d bytes\n", n)
+	go oc.readRequest()
 
-// 		req, err := FastDecodeRequest(buff)
-// 	}
-// }
+	loopNum := 0
+	for {
+		loopNum++
+		select {
+		case req := <-oc.httpRequestCh:
+			onvmrw := oc.newOnvmResponseWriter(req)
+			oc.onvmRunHandler(onvmrw, req, oc.handler.ServeHTTP)
+		case <-oc.handlerPanicCh:
+			oc.conn.Close()
+			return
+		case err := <-oc.readConnErrCh:
+			if err == io.EOF {
+				oc.conn.Close()
+			}
+			return
+		}
+	}
+}
+
+func (oc *onvmConn) readRequest() {
+	for {
+		buff := make([]byte, 10240)
+		n, err := oc.conn.Read(buff)
+
+		if err != nil {
+			Log.Errorf("nycu-ucr/net/http2/server.go/ServeOnvmConn: net.Conn.Read error -> %+v\n", err)
+			oc.readConnErrCh <- err
+			return
+		}
+		Log.Tracef("nycu-ucr/net/http2/server.go/ServeOnvmConn: net.Conn.Read -> %d bytes\n", n)
+
+		if n != 0 {
+			req, err := FastDecodeRequest(buff)
+			if err != nil {
+				Log.Errorf("nycu-ucr/net/http2/server.go/ServeOnvmConn: FastDecodeRequest error -> %+v\n", err)
+				oc.readConnErrCh <- err
+				return
+			} else {
+				oc.httpRequestCh <- req
+			}
+		}
+	}
+}
 
 /* Get onvm base offical http2 http.ResponseWriter */
 func (oc *onvmConn) newOnvmResponseWriter(req *http.Request) *onvmresponseWriter {
@@ -135,6 +171,7 @@ func (oc *onvmConn) onvmRunHandler(onvmrw *onvmresponseWriter, req *http.Request
 				buf = buf[:runtime.Stack(buf, false)]
 				Log.Errorf("nycu-ucr/net/http2/onvm_server.go/onvmRunHandler panic serving %v: %v\n%s", oc.conn.RemoteAddr(), e, buf)
 			}
+			oc.handlerPanicCh <- struct{}{}
 			return
 		}
 		onvmrw.rws.handlerDone = true

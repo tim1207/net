@@ -283,11 +283,20 @@ func FastDecodeRequest(buf []byte) (*http.Request, error) {
 	// TODO:
 	tlv1, err := pdu.DecodeTLV() // METHOD
 	req.Method = tlv1.Value.(string)
+	if err != nil {
+		return nil, err
+	}
 
 	tlv2, err := pdu.DecodeTLV() // URL
 	req.URL, err = url.Parse(tlv2.Value.(string))
+	if err != nil {
+		return nil, err
+	}
 
 	tlv3, err := pdu.DecodeTLV() // PAYLOAD
+	if err != nil {
+		return nil, err
+	}
 	if tlv3.Length != 0 {
 		req.Body = io.NopCloser(bytes.NewReader(tlv3.Value.([]byte)))
 		req.ContentLength = int64(tlv3.Length)
@@ -297,7 +306,7 @@ func FastDecodeRequest(buf []byte) (*http.Request, error) {
 	}
 	// etc ...
 
-	return req, err
+	return req, nil
 }
 
 /*********************************
