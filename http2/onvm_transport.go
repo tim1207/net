@@ -205,7 +205,11 @@ func (occ *OnvmClientConn) ReadResponse() (*http.Response, error) {
 	buf := make([]byte, 10240)
 	n, err := occ.conn.Read(buf)
 	if err != nil {
-		Log.Errorf("nycu-ucr/net/http2/onvm_transport, ReadResponse()->Read error: %+v", err)
+		if err == io.EOF {
+			occ.Close()
+		} else {
+			Log.Errorf("nycu-ucr/net/http2/onvm_transport, ReadResponse()->Read error: %+v", err)
+		}
 		return nil, err
 	}
 	Log.Tracef("nycu-ucr/net/http2/onvm_transport, ReadResponse()->Read: %dbytes", n)
@@ -265,7 +269,9 @@ func (ot *OnvmTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	// Put connection back into the pool
-	ot.ConnPool.PutClientConn(occ)
+	if occ.state != STATE_CLOSED {
+		ot.ConnPool.PutClientConn(occ)
+	}
 
 	return rsp, err
 }
@@ -368,7 +374,7 @@ func (p *onvmClientConnPool) PutClientConn(occ *OnvmClientConn) error {
 
 func (p *onvmClientConnPool) cleaner() {
 	for {
-		Log.Infof("Cleaner: %+v", p.conns)
+		Log.Debugf("Cleaner: %+v", p.conns)
 		p.mu.Lock()
 		for addr, occ_list := range p.conns {
 			new_conns := make([]*OnvmClientConn, 0)
