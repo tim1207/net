@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	formatter "github.com/antonfisher/nested-logrus-formatter"
@@ -18,7 +19,11 @@ import (
 )
 
 const (
-	LOG_LEVEL = logrus.InfoLevel
+	LOG_LEVEL  = logrus.InfoLevel
+	STATE_IDLE = iota
+	STATE_BUSY
+	STATE_CLOSED
+	IDLE_TIME_THRESHOLD = 10.0
 )
 
 var (
@@ -170,8 +175,10 @@ func DecodeResponse(buf []byte) (*ResponseWrapper, error) {
 }
 
 type OnvmClientConn struct {
-	conn net.Conn
-	req  *http.Request
+	conn            net.Conn
+	req             *http.Request
+	state           int
+	start_idle_time time.Time
 }
 
 func (occ *OnvmClientConn) WriteClientPreface() error {
@@ -221,11 +228,14 @@ func (occ *OnvmClientConn) makeHttpResponse(b []byte, n int) (*http.Response, er
 }
 
 func (occ *OnvmClientConn) Close() {
+	occ.state = STATE_CLOSED
 	occ.conn.Close()
 }
 
 type OnvmTransport struct {
-	UseONVM bool
+	UseONVM      bool
+	ConnPool     *onvmClientConnPool
+	connPoolOnce sync.Once
 }
 
 func (ot *OnvmTransport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -237,7 +247,7 @@ func (ot *OnvmTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		Log.Errorf("nycu-ucr/net/http2/onvm_transport, GetConn err: %+v", err)
 		return nil, err
 	}
-	defer occ.Close()
+	defer occ.Close() // TODO: Remove it
 
 	// Send Client Preface
 	err = occ.WriteClientPreface()
@@ -261,10 +271,24 @@ func (ot *OnvmTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		Log.Traceln("nycu-ucr/net/http2/onvm_transport, RoundTrip success")
 	}
 
+	// Put connection back into the pool
+	ot.ConnPool.PutClientConn(occ)
+
 	return rsp, err
 }
 
 func (ot *OnvmTransport) GetConn(req *http.Request) (*OnvmClientConn, error) {
+	addr := authorityAddr(req.URL.Scheme, req.URL.Host)
+	occ, err := ot.connPool().GetClientConn(req, addr)
+	if err != nil {
+		return nil, err
+	}
+
+	occ.state = STATE_BUSY
+	return occ, nil
+}
+
+func (ot *OnvmTransport) DialConn(req *http.Request) (*OnvmClientConn, error) {
 	var conn net.Conn
 	var err error
 	if ot.UseONVM {
@@ -278,5 +302,98 @@ func (ot *OnvmTransport) GetConn(req *http.Request) (*OnvmClientConn, error) {
 		return nil, err
 	}
 
-	return &OnvmClientConn{conn: conn, req: req}, err
+	return &OnvmClientConn{conn: conn, req: req, state: STATE_IDLE, start_idle_time: time.Now()}, err
+}
+
+func (ot *OnvmTransport) connPool() *onvmClientConnPool {
+	ot.connPoolOnce.Do(ot.initConnPool)
+	return ot.ConnPool
+}
+
+func (ot *OnvmTransport) initConnPool() {
+	if ot.ConnPool == nil {
+		ot.ConnPool = &onvmClientConnPool{
+			ot:    ot,
+			mu:    new(sync.Mutex),
+			conns: make(map[string][]*OnvmClientConn),
+		}
+		go ot.ConnPool.cleaner()
+	}
+}
+
+type onvmClientConnPool struct {
+	ot    *OnvmTransport
+	mu    *sync.Mutex
+	conns map[string][]*OnvmClientConn // key is host:port
+}
+
+func (p *onvmClientConnPool) GetClientConn(req *http.Request, addr string) (*OnvmClientConn, error) {
+	// Find an idle connection
+	p.mu.Lock()
+	for _, occ := range p.conns[addr] {
+		if occ.state == STATE_IDLE {
+			p.mu.Unlock()
+			return occ, nil
+		}
+	}
+	p.mu.Unlock()
+
+	// Dial an new connection
+	occ, err := p.ot.DialConn(req)
+	if err != nil {
+		return nil, err
+	}
+
+	return occ, nil
+}
+
+func (p *onvmClientConnPool) PutClientConn(occ *OnvmClientConn) error {
+	occ.state = STATE_IDLE
+	occ.start_idle_time = time.Now()
+	addr := authorityAddr(occ.req.URL.Scheme, occ.req.URL.Host)
+
+	p.mu.Lock()
+	if p.conns[addr] == nil {
+		p.conns[addr] = make([]*OnvmClientConn, 0)
+	}
+	p.conns[addr] = append(p.conns[addr], occ)
+	p.mu.Unlock()
+
+	return nil
+}
+
+func (p *onvmClientConnPool) cleaner() {
+	for {
+		Log.Infof("Cleaner: %+v", p.conns)
+		p.mu.Lock()
+		for addr, occ_list := range p.conns {
+			new_conns := make([]*OnvmClientConn, 0)
+
+			for _, occ := range occ_list {
+				if occ.state == STATE_CLOSED {
+					// Already in closed state, remove it
+					Log.Debugln("onvmClientConnPool, cleaner, remove a closed connection")
+					continue
+				} else if occ.state == STATE_IDLE {
+					idel_time := time.Since(occ.start_idle_time)
+					if idel_time.Seconds() >= IDLE_TIME_THRESHOLD {
+						// Idle long enough, remove it
+						Log.Debugln("onvmClientConnPool, cleaner, remove an idle connection")
+						occ.Close()
+						continue
+					}
+				} else {
+					new_conns = append(new_conns, occ)
+				}
+			}
+
+			if len(new_conns) == 0 {
+				delete(p.conns, addr)
+			} else if len(new_conns) < len(occ_list) {
+				p.conns[addr] = new_conns
+			}
+		}
+		p.mu.Unlock()
+		time.Sleep(5 * time.Second)
+	}
 }
