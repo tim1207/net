@@ -51,7 +51,7 @@ type onvmConn struct {
 }
 
 func (s *Server) ServeOnvmConn(c net.Conn, opts *ServeConnOpts) {
-	Log.Tracef("nycu-ucr/net/http2/onvm_server.go/ServeOnvmConn")
+	// Log.Tracef("nycu-ucr/net/http2/onvm_server.go/ServeOnvmConn")
 	baseCtx, cancel := serverConnBaseContext(c, opts)
 	defer cancel()
 
@@ -80,7 +80,7 @@ func (s *Server) ServeOnvmConn(c net.Conn, opts *ServeConnOpts) {
 	// if err != nil {
 	// 	Log.Errorf("nycu-ucr/net/http2/server.go/ServeOnvmConn: net.Conn.Read error -> %+v\n", err)
 	// }
-	// Log.Tracef("nycu-ucr/net/http2/server.go/ServeOnvmConn: net.Conn.Read -> %d bytes\n", n)
+	// // Log.Tracef("nycu-ucr/net/http2/server.go/ServeOnvmConn: net.Conn.Read -> %d bytes\n", n)
 
 	// req, err := FastDecodeRequest(buff)
 
@@ -96,7 +96,7 @@ func (s *Server) ServeOnvmConn(c net.Conn, opts *ServeConnOpts) {
 	// oc.onvmRunHandler(onvmrw, req, oc.handler.ServeHTTP)
 
 	oc.serve()
-	Log.Infoln("nycu-ucr/net/http2/server.go/ServeOnvmConn [Done]")
+	// Log.Infoln("nycu-ucr/net/http2/server.go/ServeOnvmConn [Done]")
 }
 
 func (oc *onvmConn) serve() {
@@ -133,7 +133,7 @@ func (oc *onvmConn) readRequest() {
 			oc.readConnErrCh <- err
 			return
 		}
-		Log.Tracef("nycu-ucr/net/http2/server.go/ServeOnvmConn: net.Conn.Read -> %d bytes\n", n)
+		// Log.Tracef("nycu-ucr/net/http2/server.go/ServeOnvmConn: net.Conn.Read -> %d bytes\n", n)
 
 		if n != 0 {
 			req, err := FastDecodeRequest(buff)
@@ -207,7 +207,7 @@ type onvmresponseWriterState struct {
 }
 
 func (w *onvmresponseWriter) Header() http.Header {
-	Log.Traceln("nycu-ucr/net/http2/server.go, (*onvmresponseWriter).Header")
+	// Log.Traceln("nycu-ucr/net/http2/server.go, (*onvmresponseWriter).Header")
 	rws := w.rws
 	if rws == nil {
 		panic("Header called after Handler finished")
@@ -219,7 +219,7 @@ func (w *onvmresponseWriter) Header() http.Header {
 }
 
 func (w *onvmresponseWriter) WriteHeader(code int) {
-	Log.Traceln("nycu-ucr/net/http2/server.go, (*onvmresponseWriter).WriteHeader")
+	// Log.Traceln("nycu-ucr/net/http2/server.go, (*onvmresponseWriter).WriteHeader")
 	rws := w.rws
 	if rws == nil {
 		panic("WriteHeader called after Handler finished")
@@ -228,7 +228,7 @@ func (w *onvmresponseWriter) WriteHeader(code int) {
 }
 
 func (w *onvmresponseWriter) Write(p []byte) (n int, err error) {
-	Log.Traceln("nycu-ucr/net/http2/server.go, (*onvmresponseWriter).Write")
+	// Log.Traceln("nycu-ucr/net/http2/server.go, (*onvmresponseWriter).Write")
 	rws := w.rws
 	if rws == nil {
 		panic("Write called after Handler finished")
@@ -240,7 +240,7 @@ func (w *onvmresponseWriter) Write(p []byte) (n int, err error) {
 		return 0, http.ErrBodyNotAllowed
 	}
 
-	Log.Tracef("nycu-ucr/net/http2/server.go, (*onvmresponseWriter).Write:\n%s\n", string(p))
+	// Log.Tracef("nycu-ucr/net/http2/server.go, (*onvmresponseWriter).Write:\n%s\n", string(p))
 	n, err = rws.onvmConn.conn.Write(p)
 
 	return n, err

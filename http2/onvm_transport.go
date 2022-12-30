@@ -144,7 +144,7 @@ func EncodeRequest(req *http.Request) ([]byte, error) {
 		req.Body.Read(body_buf)
 		req_wrapper.Body = body_buf
 	}
-	Log.Tracef("Before encode:\n Request:\n%+v Body:\n%+v\n", req, body_buf)
+	// Log.Tracef("Before encode:\n Request:\n%+v Body:\n%+v\n", req, body_buf)
 
 	req_wrapper.Request.Body = nil
 	req_wrapper.Request.GetBody = nil
@@ -160,7 +160,7 @@ func DecodeRequest(buf []byte) (*RequestWrapper, error) {
 
 	dec := gob.NewDecoder(bytes.NewReader(buf))
 	err := dec.Decode(&req_wrapper)
-	Log.Tracef("After decode:\n Request:\n%+v Body:\n%+v\n", req_wrapper.Request, req_wrapper.Body)
+	// Log.Tracef("After decode:\n Request:\n%+v Body:\n%+v\n", req_wrapper.Request, req_wrapper.Body)
 
 	return &req_wrapper, err
 }
@@ -212,7 +212,7 @@ func (occ *OnvmClientConn) ReadResponse() (*http.Response, error) {
 		}
 		return nil, err
 	}
-	Log.Tracef("nycu-ucr/net/http2/onvm_transport, ReadResponse()->Read: %dbytes", n)
+	// Log.Tracef("nycu-ucr/net/http2/onvm_transport, ReadResponse()->Read: %dbytes", n)
 	// resp_wrapper, err := DecodeResponse(buf)
 
 	return occ.makeHttpResponse(buf, n)
@@ -278,7 +278,7 @@ func (ot *OnvmTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 func (ot *OnvmTransport) GetConn(req *http.Request) (*OnvmClientConn, error) {
 	addr := authorityAddr(req.URL.Scheme, req.URL.Host)
-	Log.Warnf("authorityAddr: %s", addr)
+	Log.Debugf("authorityAddr: %s", addr)
 	occ, err := ot.connPool().GetClientConn(req, addr)
 	if err != nil {
 		return nil, err
@@ -331,9 +331,9 @@ func (p *onvmClientConnPool) GetClientConn(req *http.Request, addr string) (*Onv
 	// Find an idle connection
 	p.mu.Lock()
 	for _, occ := range p.conns[addr] {
-		Log.Warnln("Find conn from pool")
+		Log.Debugln("Find conn from pool")
 		if occ.state == STATE_IDLE {
-			Log.Warnln("Get conn from pool")
+			Log.Debugln("Get conn from pool")
 			p.mu.Unlock()
 			return occ, nil
 		}
@@ -345,7 +345,7 @@ func (p *onvmClientConnPool) GetClientConn(req *http.Request, addr string) (*Onv
 	if err != nil {
 		return nil, err
 	}
-	Log.Warnln("Get conn from dial")
+	Log.Debugln("Get conn from dial")
 
 	// Send Client Preface
 	err = occ.WriteClientPreface()

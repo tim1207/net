@@ -225,8 +225,13 @@ func (c *bufConn) Read(p []byte) (int, error) {
 		c.Reader = nil
 		return c.Conn.Read(p)
 	}
-	if n < len(p) {
-		p = p[:n]
-	}
-	return c.Reader.Read(p)
+	p2 := make([]byte, cap(p)-n)
+	// if n < len(p) {
+	// 	p = p[:n]
+	// }
+	c.Reader.Read(p)
+	x, err := c.Conn.Read(p2)
+	copy(p[n:], p2)
+
+	return x + n, err
 }
