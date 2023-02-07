@@ -18,8 +18,6 @@ import (
 	"log"
 	"math/rand"
 	"net"
-	"net/http/httptest"
-	"net/http/httptrace"
 	"net/textproto"
 	"net/url"
 	"os"
@@ -34,7 +32,8 @@ import (
 	"time"
 
 	"github.com/nycu-ucr/gonet/http"
-
+	"github.com/nycu-ucr/gonet/http/httptest"
+	"github.com/nycu-ucr/gonet/http/httptrace"
 	"github.com/nycu-ucr/net/http2/hpack"
 )
 

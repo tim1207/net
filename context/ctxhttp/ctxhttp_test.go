@@ -11,9 +11,10 @@ import (
 	"context"
 	"io"
 	"io/ioutil"
-	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/nycu-ucr/gonet/http/httptest"
 
 	"github.com/nycu-ucr/gonet/http"
 )

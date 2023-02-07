@@ -11,7 +11,8 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"net/http/httptest"
+
+	"github.com/nycu-ucr/gonet/http/httptest"
 
 	"github.com/nycu-ucr/gonet/http"
 

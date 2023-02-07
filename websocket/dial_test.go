@@ -9,9 +9,10 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/nycu-ucr/gonet/http/httptest"
 )
 
 // This test depend on Go 1.3+ because in earlier versions the Dialer won't be

@@ -34,7 +34,6 @@ import (
 	"github.com/nycu-ucr/net/http/httpguts"
 	"github.com/nycu-ucr/net/http2/hpack"
 	"github.com/nycu-ucr/net/idna"
-	"github.com/nycu-ucr/onvmpoller"
 )
 
 const (
@@ -478,6 +477,7 @@ type RoundTripOpt struct {
 }
 
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
+	// fmt.Printf("nycu-ucr/net/http2/transport.go/RoundTrip: \n[http.Request]\n %+v\n", req)
 	return t.RoundTripOpt(req, RoundTripOpt{})
 }
 
@@ -610,17 +610,17 @@ func canRetryError(err error) bool {
 }
 
 func (t *Transport) dialClientConn(ctx context.Context, addr string, singleUse bool) (*ClientConn, error) {
-	// host, _, err := net.SplitHostPort(addr)
-	_, _, err := net.SplitHostPort(addr)
+	host, _, err := net.SplitHostPort(addr)
+	// _, _, err := net.SplitHostPort(addr)
 	if err != nil {
 		return nil, err
 	}
-	// tconn, err := t.dialTLS(ctx, "tcp", addr, t.newTLSConfig(host))
-	println("\u001b[33m You are using ONVM \u001b[0m, HTTP2 transport.go")
-	t1 := time.Now()
-	tconn, err := onvmpoller.DialONVM("onvm", addr)
-	t2 := time.Now()
-	fmt.Printf("\u001b[35mDial\u001b[0m operation time: %v\n", t2.Sub(t1).Seconds())
+	tconn, err := t.dialTLS(ctx, "tcp", addr, t.newTLSConfig(host))
+	// println("\u001b[33m You are using ONVM \u001b[0m, HTTP2 transport.go")
+	// t1 := time.Now()
+	// tconn, err := onvmpoller.DialONVM("onvm", addr)
+	// t2 := time.Now()
+	// fmt.Printf("\u001b[35mDial\u001b[0m operation time: %v\n", t2.Sub(t1).Seconds())
 	if err != nil {
 		return nil, err
 	}

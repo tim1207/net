@@ -1,12 +1,4 @@
-// Copyright 2018 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-
-// Package h2c implements the unencrypted "h2c" form of HTTP/2.
-//
-// The h2c protocol is the non-TLS version of HTTP/2 which is not available from
-// net/http or golang.org/x/net/http2.
-package h2c
+package onvm2c
 
 import (
 	"bufio"
@@ -32,7 +24,7 @@ var (
 
 func init() {
 	e := os.Getenv("GODEBUG")
-	if strings.Contains(e, "http2debug=1") || strings.Contains(e, "http2debug=2") {
+	if strings.Contains(e, "onvmdebug=1") || strings.Contains(e, "onvmdebug=2") {
 		http2VerboseLogs = true
 	}
 }
@@ -45,7 +37,7 @@ func init() {
 // h2c - this works by using the HTTP/1 Upgrade header to request an upgrade to
 // h2c. When either of those situations occur we hijack the HTTP/1 connection,
 // convert it to a HTTP/2 connection and pass the net.Conn to http2.ServeConn.
-type h2cHandler struct {
+type onvmHandler struct {
 	Handler http.Handler
 	s       *http2.Server
 }
@@ -64,7 +56,8 @@ type h2cHandler struct {
 // the Handler is called. To limit the memory consumed by this request, wrap
 // the result of NewHandler in an http.MaxBytesHandler.
 func NewHandler(h http.Handler, s *http2.Server) http.Handler {
-	return &h2cHandler{
+	http2.Log.Traceln("nycu-ucr/net/http2/onvm2c.go: you are using onvmHandler")
+	return &onvmHandler{
 		Handler: h,
 		s:       s,
 	}
@@ -80,10 +73,10 @@ func extractServer(r *http.Request) *http.Server {
 }
 
 // ServeHTTP implement the h2c support that is enabled by h2c.GetH2CHandler.
-func (s h2cHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (s onvmHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Handle h2c with prior knowledge (RFC 7540 Section 3.4)
 	if r.Method == "PRI" && len(r.Header) == 0 && r.URL.Path == "*" && r.Proto == "HTTP/2.0" {
-		println("nycu-ucr/net/http2/h2c.go: handle h2c with prior knowledge")
+		http2.Log.Traceln("nycu-ucr/net/http2/onvm2c.go: handle h2c with prior knowledge")
 		if http2VerboseLogs {
 			log.Print("h2c: attempting h2c with prior knowledge.")
 		}
@@ -95,7 +88,7 @@ func (s h2cHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		defer conn.Close()
-		s.s.ServeConn(conn, &http2.ServeConnOpts{
+		s.s.ServeOnvmConn(conn, &http2.ServeConnOpts{
 			Context:          r.Context(),
 			BaseConfig:       extractServer(r),
 			Handler:          s.Handler,
@@ -105,7 +98,7 @@ func (s h2cHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	// Handle Upgrade to h2c (RFC 7540 Section 3.2)
 	if isH2CUpgrade(r.Header) {
-		println("nycu-ucr/net/http2/h2c.go: handle upgrade to h2c")
+		http2.Log.Traceln("nycu-ucr/net/http2/onvm2c.go: handle upgrade to h2c")
 		conn, settings, err := h2cUpgrade(w, r)
 		if err != nil {
 			if http2VerboseLogs {
@@ -114,7 +107,7 @@ func (s h2cHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		defer conn.Close()
-		s.s.ServeConn(conn, &http2.ServeConnOpts{
+		s.s.ServeOnvmConn(conn, &http2.ServeConnOpts{
 			Context:        r.Context(),
 			BaseConfig:     extractServer(r),
 			Handler:        s.Handler,
@@ -123,7 +116,7 @@ func (s h2cHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	println("nycu-ucr/net/http2/h2c.go: no upgrade to http2")
+	http2.Log.Traceln("nycu-ucr/net/http2/onvm2c.go: no upgrade to http2")
 	s.Handler.ServeHTTP(w, r)
 	return
 }
@@ -232,8 +225,13 @@ func (c *bufConn) Read(p []byte) (int, error) {
 		c.Reader = nil
 		return c.Conn.Read(p)
 	}
-	if n < len(p) {
-		p = p[:n]
-	}
-	return c.Reader.Read(p)
+	p2 := make([]byte, cap(p)-n)
+	// if n < len(p) {
+	// 	p = p[:n]
+	// }
+	c.Reader.Read(p)
+	x, err := c.Conn.Read(p2)
+	copy(p[n:], p2)
+
+	return x + n, err
 }
