@@ -3,8 +3,8 @@ module github.com/nycu-ucr/net
 go 1.19
 
 require (
-	github.com/nycu-ucr/gonet v0.0.0-20221109040209-20587e818669
-	github.com/nycu-ucr/onvmpoller v0.0.0-20221130113043-306c8f5536b1
+	github.com/nycu-ucr/gonet v0.0.0-20221206181427-d67da1e7556c
+	github.com/nycu-ucr/onvmpoller v0.0.0-20230206045804-e3f65dd61911
 	github.com/sirupsen/logrus v1.9.0
 	golang.org/x/sys v0.1.0
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211
