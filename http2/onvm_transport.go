@@ -203,7 +203,7 @@ func (occ *OnvmClientConn) WriteRequest(req *http.Request) error {
 func (occ *OnvmClientConn) ReadResponse() (*http.Response, error) {
 	Log.Traceln("nycu-ucr/net/http2/onvm_transport, ReadResponse()")
 	buf := make([]byte, 10240)
-	n, err := occ.conn.Read(buf)
+	_, err := occ.conn.Read(buf)
 	if err != nil {
 		if err == io.EOF {
 			occ.Close()
@@ -215,14 +215,18 @@ func (occ *OnvmClientConn) ReadResponse() (*http.Response, error) {
 	// Log.Tracef("nycu-ucr/net/http2/onvm_transport, ReadResponse()->Read: %dbytes", n)
 	// resp_wrapper, err := DecodeResponse(buf)
 
-	return occ.makeHttpResponse(buf, n)
+	// return occ.makeHttpResponse(buf, n)
+	return FastDecodeResponse(buf)
 }
 
 func (occ *OnvmClientConn) makeHttpResponse(b []byte, n int) (*http.Response, error) {
 	Log.Traceln("nycu-ucr/net/http2/onvm_transport, makeHttpResponse()")
+	// Log.Warnf("makeHttpResponse, %v", string(b))
+
 	rsp := new(http.Response)
 	rsp.Request = occ.req
-	rsp.Status = ""
+	rsp.Status = "200 OK"
+	rsp.StatusCode = 200
 	rsp.Proto = "HTTP/2.0"
 	rsp.ProtoMajor = 2
 	rsp.ProtoMinor = 0
@@ -263,7 +267,7 @@ func (ot *OnvmTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Read Response
 	rsp, err := occ.ReadResponse()
 	if err != nil {
-		Log.Errorln("nycu-ucr/net/http2/onvm_transport, RoundTrip not success")
+		Log.Errorf("nycu-ucr/net/http2/onvm_transport, RoundTrip not success, Error: %v", err.Error())
 	} else {
 		Log.Traceln("nycu-ucr/net/http2/onvm_transport, RoundTrip success")
 	}

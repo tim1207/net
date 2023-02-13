@@ -233,15 +233,17 @@ func (w *onvmresponseWriter) Write(p []byte) (n int, err error) {
 	if rws == nil {
 		panic("Write called after Handler finished")
 	}
-	if !rws.wroteHeader {
-		w.WriteHeader(200)
-	}
 	if !bodyAllowedForStatus(rws.status) {
 		return 0, http.ErrBodyNotAllowed
 	}
 
 	// Log.Tracef("nycu-ucr/net/http2/server.go, (*onvmresponseWriter).Write:\n%s\n", string(p))
-	n, err = rws.onvmConn.conn.Write(p)
+	b, err := FastEncodeResponse(int32(rws.status), w.Header(), int64(len(p)), p)
+	if err != nil {
+		Log.Errorf("nycu-ucr/net/http2/onvm_server, EncodeRepose err: %+v", err)
+		return 0, err
+	}
+	n, err = rws.onvmConn.conn.Write(b)
 
 	return n, err
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"strings"
 
 	"github.com/nycu-ucr/gonet/http"
 )
@@ -72,15 +73,16 @@ type Response struct {
 */
 
 const (
-	METHOD      = int8(1) // string
-	URL         = int8(2) // string
-	STATUS      = int8(3) // int32
-	PROTO       = int8(4) // string
-	CONTENT_LEN = int8(5) // int64
-	HOST        = int8(6) // string
-	REMOTE_ADDR = int8(7) // string
-	REQUEST_URI = int8(8) // string
-	PAYLOAD     = int8(9) // []byte (must put as the last TLV if exist)
+	METHOD      = int8(1)  // string
+	URL         = int8(2)  // string
+	STATUS      = int8(3)  // int32
+	PROTO       = int8(4)  // string
+	CONTENT_LEN = int8(5)  // int64
+	HOST        = int8(6)  // string
+	REMOTE_ADDR = int8(7)  // string
+	REQUEST_URI = int8(8)  // string
+	PAYLOAD     = int8(9)  // []byte (must put as the last TLV if exist)
+	HEADER      = int8(10) // string
 )
 
 /* Use for convert between request/response and []byte */
@@ -239,6 +241,7 @@ func (pdu *OnvmPDU) DecodeTLV() (*TLV, error) {
 		case PAYLOAD:
 			// []byte
 			tlv.Value = bv
+			// Log.Warnf("TLV, tag: %v, length: %v, value: %v", tlv.Tag, tlv.Length, bv)
 		default:
 			//string
 			tlv.Value = string(bv)
@@ -266,9 +269,19 @@ func FastEncodeRequest(req *http.Request) ([]byte, error) {
 
 	// TODO:
 	err = pdu.EncodeTLV(METHOD, req.Method)
+	if err != nil {
+		Log.Errorf("FastEncodeRequest, encode method: %v", err.Error())
+	}
 	err = pdu.EncodeTLV(URL, req.URL.String())
+	if err != nil {
+		Log.Errorf("FastEncodeRequest, encode url: %v", err.Error())
+	}
 	err = pdu.EncodeTLV(PAYLOAD, pdu.payload)
+	if err != nil {
+		Log.Errorf("FastEncodeRequest, encode payload: %v", err.Error())
+	}
 	// etc ...
+	// Log.Warnf("FastEncodeRequest, payload length: %v, payload: %v", len(pdu.payload), pdu.payload)
 
 	return pdu.Buffer.Bytes(), err
 }
@@ -305,6 +318,7 @@ func FastDecodeRequest(buf []byte) (*http.Request, error) {
 		req.ContentLength = 0
 	}
 	// etc ...
+	// Log.Warnf("FastDecodeRequest, content lenght: %v, payload length: %v, payload: %v", req.ContentLength, len(tlv3.Value.([]byte)), string(tlv3.Value.([]byte)))
 
 	return req, nil
 }
@@ -313,12 +327,77 @@ func FastDecodeRequest(buf []byte) (*http.Request, error) {
      Methods of http.Response
 *********************************/
 
-func FastEncodeResponse(rsp *http.Response) ([]byte, error) {
+func FastEncodeResponse(sc int32, header http.Header, cl int64, payload []byte) ([]byte, error) {
+	Log.Traceln("nycu-ucr/net/http2/onvm_encode_decode, FastEncodeResponse")
+	var err error
+	pdu := &OnvmPDU{
+		Buffer: new(bytes.Buffer),
+	}
 
-	return nil, nil
+	if cl != 0 {
+		pdu.payload = payload
+	}
+
+	// Status Code
+	err = pdu.EncodeTLV(STATUS, sc)
+	if err != nil {
+		Log.Errorf("FastEncodeResponse, encode status code: %v", err.Error())
+	}
+
+	// Header
+	err = pdu.EncodeTLV(HEADER, header.ToString())
+	if err != nil {
+		Log.Errorf("FastEncodeResponse, encode payload: %v", err.Error())
+	}
+
+	// Payload
+	err = pdu.EncodeTLV(PAYLOAD, pdu.payload)
+	if err != nil {
+		Log.Errorf("FastEncodeResponse, encode payload: %v", err.Error())
+	}
+
+	return pdu.Buffer.Bytes(), err
 }
 
 func FastDecodeResponse(buf []byte) (*http.Response, error) {
+	Log.Traceln("nycu-ucr/net/http2/onvm_encode_decode, FastDecodeResponse")
+	resp := new(http.Response)
+	resp.Header = make(http.Header)
+	pdu := &OnvmPDU{
+		Buffer: bytes.NewBuffer(buf),
+	}
 
-	return nil, nil
+	tlv1, err := pdu.DecodeTLV() // Status Code
+	resp.StatusCode = int(tlv1.Value.(uint32))
+	if err != nil {
+		return nil, err
+	}
+
+	tlv2, err := pdu.DecodeTLV() // Header
+	header_string := tlv2.Value.(string)
+	if err != nil {
+		return nil, err
+	}
+
+	var k, v string
+	for _, s := range strings.Split(header_string, "\n") {
+		n, _ := fmt.Sscanf(s, "%s %s", &k, &v)
+		if n != 0 {
+			resp.Header.Set(k, v)
+		}
+	}
+
+	tlv3, err := pdu.DecodeTLV() // PAYLOAD
+	if err != nil {
+		return nil, err
+	}
+	if tlv3.Length != 0 {
+		resp.Body = io.NopCloser(bytes.NewReader(tlv3.Value.([]byte)))
+		resp.ContentLength = int64(tlv3.Length)
+	} else {
+		resp.Body = nil
+		resp.ContentLength = 0
+	}
+
+	return resp, nil
 }
