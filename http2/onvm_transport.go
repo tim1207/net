@@ -202,37 +202,31 @@ func (occ *OnvmClientConn) WriteRequest(req *http.Request) error {
 
 func (occ *OnvmClientConn) ReadResponse() (*http.Response, error) {
 	Log.Traceln("nycu-ucr/net/http2/onvm_transport, ReadResponse()")
-	buf := make([]byte, 10240)
-	_, err := occ.conn.Read(buf)
-	if err != nil {
-		if err == io.EOF {
-			occ.Close()
-		} else {
-			Log.Errorf("nycu-ucr/net/http2/onvm_transport, ReadResponse()->Read error: %+v", err)
+
+	buf := make([]byte, 0, 32768)
+	for {
+		if len(buf) == cap(buf) {
+			buf = append(buf, 0)[:len(buf)]
 		}
-		return nil, err
+		n, err := occ.conn.Read(buf[len(buf):cap(buf)])
+		buf = buf[:len(buf)+n]
+
+		if err != nil {
+			if err == io.EOF {
+				err = nil
+			} else if err == onvmpoller.ReadIncomplete {
+				continue
+			} else {
+				Log.Errorf("nycu-ucr/net/http2/onvm_transport, ReadResponse()->Read error: %+v", err)
+				occ.Close()
+			}
+			return nil, err
+		} else {
+			break
+		}
 	}
-	// Log.Tracef("nycu-ucr/net/http2/onvm_transport, ReadResponse()->Read: %dbytes", n)
-	// resp_wrapper, err := DecodeResponse(buf)
 
-	// return occ.makeHttpResponse(buf, n)
 	return FastDecodeResponse(buf)
-}
-
-func (occ *OnvmClientConn) makeHttpResponse(b []byte, n int) (*http.Response, error) {
-	Log.Traceln("nycu-ucr/net/http2/onvm_transport, makeHttpResponse()")
-	// Log.Warnf("makeHttpResponse, %v", string(b))
-
-	rsp := new(http.Response)
-	rsp.Request = occ.req
-	rsp.Status = "200 OK"
-	rsp.StatusCode = 200
-	rsp.Proto = "HTTP/2.0"
-	rsp.ProtoMajor = 2
-	rsp.ProtoMinor = 0
-	rsp.Body = io.NopCloser(bytes.NewBuffer(b[:n]))
-
-	return rsp, nil
 }
 
 func (occ *OnvmClientConn) Close() {

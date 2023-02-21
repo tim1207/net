@@ -7,6 +7,8 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/nycu-ucr/gonet v0.0.0-20230213095244-36b1b1195802 h1:7KzUc6P5Y2wAR1RzPNrKooYJ8Lg6lF+ViF9rUl7ofqM=
 github.com/nycu-ucr/gonet v0.0.0-20230213095244-36b1b1195802/go.mod h1:Pv42t+Q6836pXU3n4sT9sU0Tu+lSyZl6pOQPdVN6exs=
+github.com/nycu-ucr/gonet v0.0.0-20230214053946-2f5515604c06 h1:viScSv73MliO7RBYtaWnvp75by/69SGTh//jCqdcNMc=
+github.com/nycu-ucr/gonet v0.0.0-20230214053946-2f5515604c06/go.mod h1:UtFD3rj0EmxzDcHjOnuFc/4+i/gBQdE4nGU2Nx8gLS4=
 github.com/nycu-ucr/onvmpoller v0.0.0-20230206045804-e3f65dd61911 h1:mY5dJDvgWVL0jj4c2U+xn9WGMo+BwQUUE5QfC/cAOCA=
 github.com/nycu-ucr/onvmpoller v0.0.0-20230206045804-e3f65dd61911/go.mod h1:KGOJFB22ziiaSu3FEpKZLBmwwbH2XIvcI7AigdWRxNU=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=

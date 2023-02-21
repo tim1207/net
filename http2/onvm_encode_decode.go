@@ -301,6 +301,9 @@ func FastDecodeRequest(buf []byte) (*http.Request, error) {
 	}
 
 	tlv2, err := pdu.DecodeTLV() // URL
+	if err != nil {
+		return nil, err
+	}
 	req.URL, err = url.Parse(tlv2.Value.(string))
 	if err != nil {
 		return nil, err
