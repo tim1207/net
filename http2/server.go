@@ -1115,6 +1115,7 @@ func (sc *serverConn) writeFrameFromHandler(wr FrameWriteRequest) error {
 //
 // If you're not on the serve goroutine, use writeFrameFromHandler instead.
 func (sc *serverConn) writeFrame(wr FrameWriteRequest) {
+	// println("nycu-ucr/net/http2/server.go, serverConn.writeFrame")
 	sc.serveG.check()
 
 	// If true, wr will not be written and wr.done will not be signaled.
@@ -2264,6 +2265,7 @@ func handleHeaderListTooLong(w http.ResponseWriter, r *http.Request) {
 // called from handler goroutines.
 // h may be nil.
 func (sc *serverConn) writeHeaders(st *stream, headerData *writeResHeaders) error {
+	// println("nycu-ucr/net/http2/server.go, serverConn.writeHeaders Start")
 	sc.serveG.checkNotOn() // NOT on
 	var errc chan error
 	if headerData.h != nil {
@@ -2291,6 +2293,7 @@ func (sc *serverConn) writeHeaders(st *stream, headerData *writeResHeaders) erro
 			return errStreamClosed
 		}
 	}
+	// println("nycu-ucr/net/http2/server.go, serverConn.writeHeaders End")
 	return nil
 }
 
@@ -2511,6 +2514,7 @@ func (rws *responseWriterState) declareTrailer(k string) {
 // writeChunk is also responsible (on the first chunk) for sending the
 // HEADER response.
 func (rws *responseWriterState) writeChunk(p []byte) (n int, err error) {
+	// println("nycu-ucr/net/http2/server.go, (*responseWriterState).writeChunk Start")
 	if !rws.wroteHeader {
 		rws.writeHeader(200)
 	}
@@ -2614,6 +2618,7 @@ func (rws *responseWriterState) writeChunk(p []byte) (n int, err error) {
 		}
 		return len(p), err
 	}
+	// println("nycu-ucr/net/http2/server.go, (*responseWriterState).writeChunk End")
 	return len(p), nil
 }
 
@@ -2671,7 +2676,7 @@ func (rws *responseWriterState) promoteUndeclaredTrailers() {
 }
 
 func (w *responseWriter) Flush() {
-	// println("nycu-ucr/net/http2/server.go, (*responseWriter).Flush")
+	// println("nycu-ucr/net/http2/server.go, (*responseWriter).Flush, status: ", w.rws.status)
 	rws := w.rws
 	if rws == nil {
 		panic("Header called after Handler finished")

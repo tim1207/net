@@ -163,13 +163,14 @@ func (pdu *OnvmPDU) EncodeTLV(tag int8, data any) error {
 			return err
 		}
 	case []byte:
-		/* When no Body exist, we still fill the payload tag and its length equeal 0, then return with no value */
-		if len(v) == 0 {
-			return nil
-		}
 		if _, err := buf.Write(uint32Tobyte(uint32(len(v)))); err != nil {
 			Log.Errorf("[EncodeTLV]\nValue: %d\nError: %+v\n", v, err)
 			return err
+		}
+		/* When no Body exist, we still fill the payload tag and its length equeal 0, then return with no value */
+		if len(v) == 0 {
+			println("When no Body exist, we still fill the payload tag and its length equeal 0, then return with no value")
+			return nil
 		}
 	}
 
@@ -339,6 +340,8 @@ func FastEncodeResponse(sc int32, header http.Header, cl int64, payload []byte) 
 
 	if cl != 0 {
 		pdu.payload = payload
+	} else {
+		pdu.payload = make([]byte, 0)
 	}
 
 	// Status Code
@@ -401,6 +404,7 @@ func FastDecodeResponse(buf []byte) (*http.Response, error) {
 		resp.Body = nil
 		resp.ContentLength = 0
 	}
+	// println("FastDecodeResponse, response length: ", resp.ContentLength)
 
 	return resp, nil
 }

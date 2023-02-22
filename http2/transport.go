@@ -1182,6 +1182,7 @@ func (cc *ClientConn) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	handleResponseHeaders := func() (*http.Response, error) {
+		// fmt.Printf("transport.go, handleResponseHeaders, status: %v\n", cs.res.Status)
 		res := cs.res
 		if res.StatusCode > 299 {
 			// On error or status code 3xx, 4xx, 5xx, etc abort any
