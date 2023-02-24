@@ -221,7 +221,7 @@ func (w *onvmresponseWriter) Header() http.Header {
 
 func (w *onvmresponseWriter) WriteHeader(code int) {
 	// Log.Traceln("nycu-ucr/net/http2/server.go, (*onvmresponseWriter).WriteHeader")
-	println("onvmresponseWriter.WriteHeader")
+	// println("onvmresponseWriter.WriteHeader")
 	rws := w.rws
 	if rws == nil {
 		panic("WriteHeader called after Handler finished")

@@ -169,7 +169,7 @@ func (pdu *OnvmPDU) EncodeTLV(tag int8, data any) error {
 		}
 		/* When no Body exist, we still fill the payload tag and its length equeal 0, then return with no value */
 		if len(v) == 0 {
-			println("When no Body exist, we still fill the payload tag and its length equeal 0, then return with no value")
+			// println("When no Body exist, we still fill the payload tag and its length equeal 0, then return with no value")
 			return nil
 		}
 	}

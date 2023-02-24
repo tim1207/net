@@ -189,6 +189,7 @@ func (occ *OnvmClientConn) WriteClientPreface() error {
 
 func (occ *OnvmClientConn) WriteRequest(req *http.Request) error {
 	Log.Traceln("nycu-ucr/net/http2/onvm_transport, WriteRequest()")
+	// fmt.Printf("WriteRequest to %+v, URL: %+v\n", occ.conn.RemoteAddr(), req.URL.String())
 	occ.req = req
 	b, err := FastEncodeRequest(req)
 	if err != nil {
@@ -202,6 +203,7 @@ func (occ *OnvmClientConn) WriteRequest(req *http.Request) error {
 
 func (occ *OnvmClientConn) ReadResponse() (*http.Response, error) {
 	Log.Traceln("nycu-ucr/net/http2/onvm_transport, ReadResponse()")
+	// fmt.Printf("ReadResponse from %+v\n", occ.conn.RemoteAddr())
 
 	buf := make([]byte, 0, 32768)
 	for {
@@ -214,7 +216,7 @@ func (occ *OnvmClientConn) ReadResponse() (*http.Response, error) {
 		if err != nil {
 			if err == io.EOF {
 				err = nil
-			} else if err == onvmpoller.ReadIncomplete {
+			} else if err.Error() == "Continue" {
 				continue
 			} else {
 				Log.Errorf("nycu-ucr/net/http2/onvm_transport, ReadResponse()->Read error: %+v", err)
