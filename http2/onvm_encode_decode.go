@@ -133,6 +133,31 @@ func byteTouint32(b []byte) uint32 {
 	return binary.BigEndian.Uint32(b)
 }
 
+func toHeader(header_string string) http.Header {
+	h := make(http.Header)
+	var k, v string
+	for _, s := range strings.Split(header_string, "\n") {
+		ss := strings.Split(s, "&")
+
+		if len(ss) == 1 {
+			if ss[0] != "" {
+				fmt.Printf("Only key (%v) no value\n", ss[0])
+			} else {
+				// Empty, ignore it
+				continue
+			}
+		} else if len(ss) == 2 {
+			k = ss[0]
+			v = ss[1]
+			h.Set(k, v)
+		} else {
+			fmt.Printf("Unknown header type: %v\n", ss)
+		}
+	}
+
+	return h
+}
+
 func (pdu *OnvmPDU) EncodeTLV(tag int8, data any) error {
 	Log.Traceln("nycu-ucr/net/http2/onvm_encode_decode, EncodeTLV")
 	buf := pdu.Buffer
@@ -326,13 +351,7 @@ func FastDecodeRequest(buf []byte) (*http.Request, error) {
 		return nil, err
 	}
 
-	var k, v string
-	for _, s := range strings.Split(header_string, "\n") {
-		n, _ := fmt.Sscanf(s, "%s %s", &k, &v)
-		if n != 0 {
-			req.Header.Set(k, v)
-		}
-	}
+	req.Header = toHeader(header_string)
 
 	// Payload
 	tlv4, err := pdu.DecodeTLV()
@@ -391,7 +410,6 @@ func FastEncodeResponse(sc int32, header http.Header, cl int64, payload []byte) 
 func FastDecodeResponse(buf []byte) (*http.Response, error) {
 	Log.Traceln("nycu-ucr/net/http2/onvm_encode_decode, FastDecodeResponse")
 	resp := new(http.Response)
-	resp.Header = make(http.Header)
 	pdu := &OnvmPDU{
 		Buffer: bytes.NewBuffer(buf),
 	}
@@ -409,14 +427,7 @@ func FastDecodeResponse(buf []byte) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	var k, v string
-	for _, s := range strings.Split(header_string, "\n") {
-		n, _ := fmt.Sscanf(s, "%s %s", &k, &v)
-		if n != 0 {
-			resp.Header.Set(k, v)
-		}
-	}
+	resp.Header = toHeader(header_string)
 
 	// PAYLOAD
 	tlv3, err := pdu.DecodeTLV()
