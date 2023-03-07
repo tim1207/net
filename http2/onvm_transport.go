@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/gob"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -188,6 +189,7 @@ func (occ *OnvmClientConn) WriteClientPreface() error {
 }
 
 func (occ *OnvmClientConn) WriteRequest(req *http.Request) error {
+	defer TimeTrack(time.Now(), fmt.Sprintf("Local (%v) <-> Remote (%v)", occ.conn.LocalAddr().String(), occ.conn.RemoteAddr().String()))
 	Log.Traceln("nycu-ucr/net/http2/onvm_transport, WriteRequest()")
 	// fmt.Printf("WriteRequest to %+v, URL: %+v\n", occ.conn.RemoteAddr(), req.URL.String())
 	occ.req = req
@@ -204,6 +206,7 @@ func (occ *OnvmClientConn) WriteRequest(req *http.Request) error {
 func (occ *OnvmClientConn) ReadResponse() (*http.Response, error) {
 	Log.Traceln("nycu-ucr/net/http2/onvm_transport, ReadResponse()")
 	// fmt.Printf("ReadResponse from %+v\n", occ.conn.RemoteAddr())
+	time_track_is_set := false
 
 	buf := make([]byte, 0, 32768)
 	for {
@@ -212,6 +215,10 @@ func (occ *OnvmClientConn) ReadResponse() (*http.Response, error) {
 		}
 		n, err := occ.conn.Read(buf[len(buf):cap(buf)])
 		buf = buf[:len(buf)+n]
+		if !time_track_is_set {
+			defer TimeTrack(time.Now(), "From read get data")
+			time_track_is_set = true
+		}
 
 		if err != nil {
 			if err == io.EOF {
@@ -243,6 +250,8 @@ type OnvmTransport struct {
 }
 
 func (ot *OnvmTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	addr := authorityAddr(req.URL.Scheme, req.URL.Host)
+	defer TimeTrack(time.Now(), addr)
 	var err error
 
 	// Get Connection
@@ -266,6 +275,7 @@ func (ot *OnvmTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		Log.Errorf("nycu-ucr/net/http2/onvm_transport, RoundTrip not success, Error: %v", err.Error())
 	} else {
 		Log.Traceln("nycu-ucr/net/http2/onvm_transport, RoundTrip success")
+		// fmt.Printf("Response content length: %d (Bytes)\n", rsp.ContentLength)
 	}
 
 	// Put connection back into the pool
@@ -277,6 +287,7 @@ func (ot *OnvmTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 func (ot *OnvmTransport) GetConn(req *http.Request) (*OnvmClientConn, error) {
+	defer TimeTrack(time.Now(), "")
 	addr := authorityAddr(req.URL.Scheme, req.URL.Host)
 	Log.Debugf("authorityAddr: %s", addr)
 	occ, err := ot.connPool().GetClientConn(req, addr)

@@ -12,6 +12,7 @@ import (
 	"net/textproto"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/nycu-ucr/gonet/http"
 	"github.com/nycu-ucr/net/http/httpguts"
@@ -74,6 +75,7 @@ func extractServer(r *http.Request) *http.Server {
 
 // ServeHTTP implement the h2c support that is enabled by h2c.GetH2CHandler.
 func (s onvmHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	defer http2.TimeTrack(time.Now(), "net ServeHTTP")
 	// Handle h2c with prior knowledge (RFC 7540 Section 3.4)
 	if r.Method == "PRI" && len(r.Header) == 0 && r.URL.Path == "*" && r.Proto == "HTTP/2.0" {
 		http2.Log.Traceln("nycu-ucr/net/http2/onvm2c.go: handle h2c with prior knowledge")

@@ -2224,6 +2224,7 @@ func (sc *serverConn) newResponseWriter(st *stream, req *http.Request) *response
 
 // Run on its own goroutine.
 func (sc *serverConn) runHandler(rw *responseWriter, req *http.Request, handler func(http.ResponseWriter, *http.Request)) {
+	defer TimeTrack(time.Now(), fmt.Sprintf("Local (%v) <-> Remote (%v)", sc.conn.LocalAddr().String(), sc.conn.RemoteAddr().String()))
 	didPanic := true
 	// fmt.Printf("nycu-ucr/net/http2/server.go/runHandler:\n[http.Request]\n %+v\n", req)
 	defer func() {

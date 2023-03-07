@@ -2,9 +2,11 @@ package http2
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"runtime"
+	"time"
 
 	"github.com/nycu-ucr/gonet/http"
 )
@@ -51,6 +53,7 @@ type onvmConn struct {
 }
 
 func (s *Server) ServeOnvmConn(c net.Conn, opts *ServeConnOpts) {
+	defer TimeTrack(time.Now(), fmt.Sprintf("Local (%v) <-> Remote (%v)", c.LocalAddr().String(), c.RemoteAddr().String()))
 	// Log.Tracef("nycu-ucr/net/http2/onvm_server.go/ServeOnvmConn")
 	baseCtx, cancel := serverConnBaseContext(c, opts)
 	defer cancel()
@@ -100,6 +103,7 @@ func (s *Server) ServeOnvmConn(c net.Conn, opts *ServeConnOpts) {
 }
 
 func (oc *onvmConn) serve() {
+	defer TimeTrack(time.Now(), fmt.Sprintf("Local (%v) <-> Remote (%v)", oc.conn.LocalAddr().String(), oc.conn.RemoteAddr().String()))
 	defer oc.conn.Close()
 
 	go oc.readRequest()
@@ -109,6 +113,7 @@ func (oc *onvmConn) serve() {
 		loopNum++
 		select {
 		case req := <-oc.httpRequestCh:
+			req.RemoteAddr = oc.conn.RemoteAddr().String()
 			onvmrw := oc.newOnvmResponseWriter(req)
 			oc.onvmRunHandler(onvmrw, req, oc.handler.ServeHTTP)
 		case <-oc.handlerPanicCh:
@@ -124,16 +129,31 @@ func (oc *onvmConn) serve() {
 }
 
 func (oc *onvmConn) readRequest() {
-	for {
-		buff := make([]byte, 10240)
-		n, err := oc.conn.Read(buff)
+	var n int
+	var err error
 
-		if err != nil {
-			Log.Errorf("nycu-ucr/net/http2/server.go/ServeOnvmConn: net.Conn.Read error -> %+v\n", err)
-			oc.readConnErrCh <- err
-			return
+	for {
+		buff := make([]byte, 0, 32768)
+		for {
+			if len(buff) == cap(buff) {
+				buff = append(buff, 0)[:len(buff)]
+			}
+			n, err = oc.conn.Read(buff[len(buff):cap(buff)])
+			buff = buff[:len(buff)+n]
+
+			if err != nil {
+				if err == io.EOF {
+					err = nil
+				} else if err.Error() == "Continue" {
+					continue
+				} else {
+					Log.Errorf("nycu-ucr/net/http2/server.go/ServeOnvmConn: net.Conn.Read error -> %+v\n", err)
+					oc.readConnErrCh <- err
+				}
+			} else {
+				break
+			}
 		}
-		// Log.Tracef("nycu-ucr/net/http2/server.go/ServeOnvmConn: net.Conn.Read -> %d bytes\n", n)
 
 		if n != 0 {
 			req, err := FastDecodeRequest(buff)
@@ -177,6 +197,8 @@ func (oc *onvmConn) onvmRunHandler(onvmrw *onvmresponseWriter, req *http.Request
 
 		onvmrw.handlerDone()
 	}()
+	defer TimeTrack(time.Now(), fmt.Sprintf("Local (%v) <-> Remote (%v)", oc.conn.LocalAddr().String(), oc.conn.RemoteAddr().String()))
+
 	handler(onvmrw, req)
 	didPanic = false
 	Log.Traceln("nycu-ucr/net/http2/onvm_server.go/onvmRunHandler [End]\n")
@@ -258,7 +280,7 @@ func (w *onvmresponseWriter) Write(p []byte) (n int, err error) {
 		rws.sentHeader = true
 	}
 
-	return n, err
+	return len(p), err
 }
 
 func (w *onvmresponseWriter) handlerDone() {
