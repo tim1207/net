@@ -268,15 +268,22 @@ func FastEncodeRequest(req *http.Request) ([]byte, error) {
 		req.Body.Read(pdu.payload)
 	}
 
-	// TODO:
+	// Method
 	err = pdu.EncodeTLV(METHOD, req.Method)
 	if err != nil {
 		Log.Errorf("FastEncodeRequest, encode method: %v", err.Error())
 	}
+	// URL
 	err = pdu.EncodeTLV(URL, req.URL.String())
 	if err != nil {
 		Log.Errorf("FastEncodeRequest, encode url: %v", err.Error())
 	}
+	// Header
+	err = pdu.EncodeTLV(HEADER, req.Header.ToString())
+	if err != nil {
+		Log.Errorf("FastEncodeResponse, encode payload: %v", err.Error())
+	}
+	// Payload
 	err = pdu.EncodeTLV(PAYLOAD, pdu.payload)
 	if err != nil {
 		Log.Errorf("FastEncodeRequest, encode payload: %v", err.Error())
@@ -290,18 +297,20 @@ func FastEncodeRequest(req *http.Request) ([]byte, error) {
 func FastDecodeRequest(buf []byte) (*http.Request, error) {
 	Log.Traceln("nycu-ucr/net/http2/onvm_encode_decode, FastDecodeRequest")
 	req := new(http.Request)
+	req.Header = make(http.Header)
 	pdu := &OnvmPDU{
 		Buffer: bytes.NewBuffer(buf),
 	}
 
-	// TODO:
-	tlv1, err := pdu.DecodeTLV() // METHOD
+	// Method
+	tlv1, err := pdu.DecodeTLV()
 	req.Method = tlv1.Value.(string)
 	if err != nil {
 		return nil, err
 	}
 
-	tlv2, err := pdu.DecodeTLV() // URL
+	// URL
+	tlv2, err := pdu.DecodeTLV()
 	if err != nil {
 		return nil, err
 	}
@@ -310,19 +319,35 @@ func FastDecodeRequest(buf []byte) (*http.Request, error) {
 		return nil, err
 	}
 
-	tlv3, err := pdu.DecodeTLV() // PAYLOAD
+	// Header
+	tlv3, err := pdu.DecodeTLV()
+	header_string := tlv3.Value.(string)
 	if err != nil {
 		return nil, err
 	}
-	if tlv3.Length != 0 {
-		req.Body = io.NopCloser(bytes.NewReader(tlv3.Value.([]byte)))
-		req.ContentLength = int64(tlv3.Length)
+
+	var k, v string
+	for _, s := range strings.Split(header_string, "\n") {
+		n, _ := fmt.Sscanf(s, "%s %s", &k, &v)
+		if n != 0 {
+			req.Header.Set(k, v)
+		}
+	}
+
+	// Payload
+	tlv4, err := pdu.DecodeTLV()
+	if err != nil {
+		return nil, err
+	}
+	if tlv4.Length != 0 {
+		req.Body = io.NopCloser(bytes.NewReader(tlv4.Value.([]byte)))
+		req.ContentLength = int64(tlv4.Length)
 	} else {
 		req.Body = nil
 		req.ContentLength = 0
 	}
 	// etc ...
-	// Log.Warnf("FastDecodeRequest, content lenght: %v, payload length: %v, payload: %v", req.ContentLength, len(tlv3.Value.([]byte)), string(tlv3.Value.([]byte)))
+	// Log.Warnf("FastDecodeRequest, content lenght: %v, payload length: %v, payload: %v", req.ContentLength, len(tlv4.Value.([]byte)), string(tlv4.Value.([]byte)))
 
 	return req, nil
 }
@@ -349,13 +374,11 @@ func FastEncodeResponse(sc int32, header http.Header, cl int64, payload []byte) 
 	if err != nil {
 		Log.Errorf("FastEncodeResponse, encode status code: %v", err.Error())
 	}
-
 	// Header
 	err = pdu.EncodeTLV(HEADER, header.ToString())
 	if err != nil {
 		Log.Errorf("FastEncodeResponse, encode payload: %v", err.Error())
 	}
-
 	// Payload
 	err = pdu.EncodeTLV(PAYLOAD, pdu.payload)
 	if err != nil {
@@ -373,13 +396,15 @@ func FastDecodeResponse(buf []byte) (*http.Response, error) {
 		Buffer: bytes.NewBuffer(buf),
 	}
 
-	tlv1, err := pdu.DecodeTLV() // Status Code
+	// Status Code
+	tlv1, err := pdu.DecodeTLV()
 	resp.StatusCode = int(tlv1.Value.(uint32))
 	if err != nil {
 		return nil, err
 	}
 
-	tlv2, err := pdu.DecodeTLV() // Header
+	// Header
+	tlv2, err := pdu.DecodeTLV()
 	header_string := tlv2.Value.(string)
 	if err != nil {
 		return nil, err
@@ -393,18 +418,19 @@ func FastDecodeResponse(buf []byte) (*http.Response, error) {
 		}
 	}
 
-	tlv3, err := pdu.DecodeTLV() // PAYLOAD
+	// PAYLOAD
+	tlv3, err := pdu.DecodeTLV()
 	if err != nil {
 		return nil, err
 	}
 	if tlv3.Length != 0 {
 		resp.Body = io.NopCloser(bytes.NewReader(tlv3.Value.([]byte)))
 		resp.ContentLength = int64(tlv3.Length)
+		// fmt.Printf("FastDecodeResponse, response content length: %d (Bytes)\n", resp.ContentLength)
 	} else {
 		resp.Body = nil
 		resp.ContentLength = 0
 	}
-	// println("FastDecodeResponse, response length: ", resp.ContentLength)
 
 	return resp, nil
 }
