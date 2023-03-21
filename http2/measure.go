@@ -2,7 +2,6 @@ package http2
 
 import (
 	"fmt"
-	"log"
 	"regexp"
 	"runtime"
 	"time"
@@ -21,5 +20,5 @@ func TimeTrack(start time.Time, info string) {
 	runtimeFunc := regexp.MustCompile(`^.*\.(.*)$`)
 	name := runtimeFunc.ReplaceAllString(funcObj.Name(), "$1")
 
-	log.Println(fmt.Sprintf("\u001b[32;1m[TimeTrack]\u001b[0m %s took %d (ns); (Info: %v)", name, elapsed.Nanoseconds(), info))
+	Log.Traceln(fmt.Sprintf("\u001b[32;1m[TimeTrack]\u001b[0m %s took %d (ns); (Info: %v)", name, elapsed.Nanoseconds(), info))
 }
