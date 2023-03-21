@@ -215,22 +215,20 @@ func (occ *OnvmClientConn) ReadResponse() (*http.Response, error) {
 		}
 		n, err := occ.conn.Read(buf[len(buf):cap(buf)])
 		buf = buf[:len(buf)+n]
+
+		// Latency test section
 		if !time_track_is_set {
 			defer TimeTrack(time.Now(), "From read get data")
 			time_track_is_set = true
 		}
+		// Latency test section
 
-		if err != nil {
-			if err == io.EOF {
-				err = nil
-			} else if err.Error() == "Continue" {
-				continue
-			} else {
-				Log.Errorf("nycu-ucr/net/http2/onvm_transport, ReadResponse()->Read error: %+v", err)
-				occ.Close()
-			}
-			return nil, err
-		} else {
+		if n == 0 && err == nil {
+			// Payload is read completely
+			break
+		} else if err != nil {
+			Log.Errorf("nycu-ucr/net/http2/onvm_transport, ReadResponse()->Read error: %+v", err)
+			occ.Close()
 			break
 		}
 	}

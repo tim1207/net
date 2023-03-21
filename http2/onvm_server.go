@@ -141,21 +141,16 @@ func (oc *onvmConn) readRequest() {
 			n, err = oc.conn.Read(buff[len(buff):cap(buff)])
 			buff = buff[:len(buff)+n]
 
-			if err != nil {
-				if err == io.EOF {
-					err = nil
-				} else if err.Error() == "Continue" {
-					continue
-				} else {
-					Log.Errorf("nycu-ucr/net/http2/server.go/ServeOnvmConn: net.Conn.Read error -> %+v\n", err)
-					oc.readConnErrCh <- err
-				}
-			} else {
+			if n == 0 && err == nil {
+				// Payload is read completely
 				break
+			} else if err != nil {
+				Log.Errorf("nycu-ucr/net/http2/server.go/ServeOnvmConn: net.Conn.Read error -> %+v\n", err)
+				oc.readConnErrCh <- err
 			}
 		}
 
-		if n != 0 {
+		if len(buff) != 0 {
 			req, err := FastDecodeRequest(buff)
 			if err != nil {
 				Log.Errorf("nycu-ucr/net/http2/server.go/ServeOnvmConn: FastDecodeRequest error -> %+v\n", err)
