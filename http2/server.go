@@ -1115,6 +1115,7 @@ func (sc *serverConn) writeFrameFromHandler(wr FrameWriteRequest) error {
 //
 // If you're not on the serve goroutine, use writeFrameFromHandler instead.
 func (sc *serverConn) writeFrame(wr FrameWriteRequest) {
+	// println("nycu-ucr/net/http2/server.go, serverConn.writeFrame")
 	sc.serveG.check()
 
 	// If true, wr will not be written and wr.done will not be signaled.
@@ -2223,8 +2224,9 @@ func (sc *serverConn) newResponseWriter(st *stream, req *http.Request) *response
 
 // Run on its own goroutine.
 func (sc *serverConn) runHandler(rw *responseWriter, req *http.Request, handler func(http.ResponseWriter, *http.Request)) {
+	defer TimeTrack(time.Now(), fmt.Sprintf("Local (%v) <-> Remote (%v)", sc.conn.LocalAddr().String(), sc.conn.RemoteAddr().String()))
 	didPanic := true
-	fmt.Printf("nycu-ucr/net/http2/server.go/runHandler:\n[http.Request]\n %+v\n", req)
+	// fmt.Printf("nycu-ucr/net/http2/server.go/runHandler:\n[http.Request]\n %+v\n", req)
 	defer func() {
 		rw.rws.stream.cancelCtx()
 		if req.MultipartForm != nil {
@@ -2264,6 +2266,7 @@ func handleHeaderListTooLong(w http.ResponseWriter, r *http.Request) {
 // called from handler goroutines.
 // h may be nil.
 func (sc *serverConn) writeHeaders(st *stream, headerData *writeResHeaders) error {
+	// println("nycu-ucr/net/http2/server.go, serverConn.writeHeaders Start")
 	sc.serveG.checkNotOn() // NOT on
 	var errc chan error
 	if headerData.h != nil {
@@ -2291,6 +2294,7 @@ func (sc *serverConn) writeHeaders(st *stream, headerData *writeResHeaders) erro
 			return errStreamClosed
 		}
 	}
+	// println("nycu-ucr/net/http2/server.go, serverConn.writeHeaders End")
 	return nil
 }
 
@@ -2511,6 +2515,7 @@ func (rws *responseWriterState) declareTrailer(k string) {
 // writeChunk is also responsible (on the first chunk) for sending the
 // HEADER response.
 func (rws *responseWriterState) writeChunk(p []byte) (n int, err error) {
+	// println("nycu-ucr/net/http2/server.go, (*responseWriterState).writeChunk Start")
 	if !rws.wroteHeader {
 		rws.writeHeader(200)
 	}
@@ -2614,6 +2619,7 @@ func (rws *responseWriterState) writeChunk(p []byte) (n int, err error) {
 		}
 		return len(p), err
 	}
+	// println("nycu-ucr/net/http2/server.go, (*responseWriterState).writeChunk End")
 	return len(p), nil
 }
 
@@ -2671,7 +2677,7 @@ func (rws *responseWriterState) promoteUndeclaredTrailers() {
 }
 
 func (w *responseWriter) Flush() {
-	println("nycu-ucr/net/http2/server.go, (*responseWriter).Flush")
+	// println("nycu-ucr/net/http2/server.go, (*responseWriter).Flush, status: ", w.rws.status)
 	rws := w.rws
 	if rws == nil {
 		panic("Header called after Handler finished")
@@ -2691,7 +2697,7 @@ func (w *responseWriter) Flush() {
 }
 
 func (w *responseWriter) CloseNotify() <-chan bool {
-	println("nycu-ucr/net/http2/server.go, (*responseWriter).CloseNotify")
+	// println("nycu-ucr/net/http2/server.go, (*responseWriter).CloseNotify")
 	rws := w.rws
 	if rws == nil {
 		panic("CloseNotify called after Handler finished")
@@ -2712,7 +2718,7 @@ func (w *responseWriter) CloseNotify() <-chan bool {
 }
 
 func (w *responseWriter) Header() http.Header {
-	println("nycu-ucr/net/http2/server.go, (*responseWriter).Header")
+	// println("nycu-ucr/net/http2/server.go, (*responseWriter).Header")
 	rws := w.rws
 	if rws == nil {
 		panic("Header called after Handler finished")
@@ -2741,7 +2747,7 @@ func checkWriteHeaderCode(code int) {
 }
 
 func (w *responseWriter) WriteHeader(code int) {
-	println("nycu-ucr/net/http2/server.go, (*responseWriter).WriteHeader")
+	// println("nycu-ucr/net/http2/server.go, (*responseWriter).WriteHeader")
 	rws := w.rws
 	if rws == nil {
 		panic("WriteHeader called after Handler finished")
@@ -2807,18 +2813,18 @@ func cloneHeader(h http.Header) http.Header {
 // * -> responseWriterState.writeChunk(p []byte)
 // * -> responseWriterState.writeChunk (most of the magic; see comment there)
 func (w *responseWriter) Write(p []byte) (n int, err error) {
-	println("nycu-ucr/net/http2/server.go, (*responseWriter).bigWrite")
+	// println("nycu-ucr/net/http2/server.go, (*responseWriter).bigWrite")
 	return w.write(len(p), p, "")
 }
 
 func (w *responseWriter) WriteString(s string) (n int, err error) {
-	println("nycu-ucr/net/http2/server.go, (*responseWriter).WriteString")
+	// println("nycu-ucr/net/http2/server.go, (*responseWriter).WriteString")
 	return w.write(len(s), nil, s)
 }
 
 // either dataB or dataS is non-zero.
 func (w *responseWriter) write(lenData int, dataB []byte, dataS string) (n int, err error) {
-	println("nycu-ucr/net/http2/server.go, (*responseWriter).littlewrite")
+	// println("nycu-ucr/net/http2/server.go, (*responseWriter).littlewrite")
 	rws := w.rws
 	if rws == nil {
 		panic("Write called after Handler finished")
@@ -2843,7 +2849,7 @@ func (w *responseWriter) write(lenData int, dataB []byte, dataS string) (n int, 
 }
 
 func (w *responseWriter) handlerDone() {
-	println("nycu-ucr/net/http2/server.go, (*responseWriter).handlerDone")
+	// println("nycu-ucr/net/http2/server.go, (*responseWriter).handlerDone")
 	rws := w.rws
 	dirty := rws.dirty
 	rws.handlerDone = true
@@ -2869,7 +2875,7 @@ var (
 var _ http.Pusher = (*responseWriter)(nil)
 
 func (w *responseWriter) Push(target string, opts *http.PushOptions) error {
-	println("nycu-ucr/net/http2/server.go, (*responseWriter).Push")
+	// println("nycu-ucr/net/http2/server.go, (*responseWriter).Push")
 	st := w.rws.stream
 	sc := st.sc
 	sc.serveG.checkNotOn()

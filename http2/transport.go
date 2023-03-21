@@ -478,6 +478,7 @@ type RoundTripOpt struct {
 
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	// fmt.Printf("nycu-ucr/net/http2/transport.go/RoundTrip: \n[http.Request]\n %+v\n", req)
+	defer TimeTrack(time.Now(), "")
 	return t.RoundTripOpt(req, RoundTripOpt{})
 }
 
@@ -1182,6 +1183,7 @@ func (cc *ClientConn) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	handleResponseHeaders := func() (*http.Response, error) {
+		// fmt.Printf("transport.go, handleResponseHeaders, status: %v\n", cs.res.Status)
 		res := cs.res
 		if res.StatusCode > 299 {
 			// On error or status code 3xx, 4xx, 5xx, etc abort any
@@ -1239,6 +1241,7 @@ func (cc *ClientConn) RoundTrip(req *http.Request) (*http.Response, error) {
 //
 // It sends the request and performs post-request cleanup (closing Request.Body, etc.).
 func (cs *clientStream) doRequest(req *http.Request) {
+	defer TimeTrack(time.Now(), "")
 	err := cs.writeRequest(req)
 	cs.cleanupWriteRequest(err)
 }
@@ -1376,6 +1379,7 @@ func (cs *clientStream) writeRequest(req *http.Request) (err error) {
 	// Wait until the peer half-closes its end of the stream,
 	// or until the request is aborted (via context, error, or otherwise),
 	// whichever comes first.
+	defer TimeTrack(time.Now(), fmt.Sprintf("Local (%v) <-> Remote (%v)", cs.cc.tconn.LocalAddr().String(), cs.cc.tconn.RemoteAddr().String()))
 	for {
 		select {
 		case <-cs.peerClosed:
@@ -2233,6 +2237,7 @@ func (rl *clientConnReadLoop) run() error {
 }
 
 func (rl *clientConnReadLoop) processHeaders(f *MetaHeadersFrame) error {
+	defer TimeTrack(time.Now(), fmt.Sprintf("Stream ID: %v", f.StreamID))
 	cs := rl.streamByID(f.StreamID)
 	if cs == nil {
 		// We'd get here if we canceled a request while the
@@ -2558,6 +2563,7 @@ func (b transportResponseBody) Close() error {
 }
 
 func (rl *clientConnReadLoop) processData(f *DataFrame) error {
+	defer TimeTrack(time.Now(), fmt.Sprintf("Stream ID: %v", f.StreamID))
 	cc := rl.cc
 	cs := rl.streamByID(f.StreamID)
 	data := f.Data()
@@ -2711,6 +2717,7 @@ func (cs *clientStream) copyTrailers() {
 }
 
 func (rl *clientConnReadLoop) processGoAway(f *GoAwayFrame) error {
+	defer TimeTrack(time.Now(), fmt.Sprintf("Stream ID: %v", f.StreamID))
 	cc := rl.cc
 	cc.t.connPool().MarkDead(cc)
 	if f.ErrCode != 0 {
@@ -2725,6 +2732,7 @@ func (rl *clientConnReadLoop) processGoAway(f *GoAwayFrame) error {
 }
 
 func (rl *clientConnReadLoop) processSettings(f *SettingsFrame) error {
+	defer TimeTrack(time.Now(), fmt.Sprintf("Stream ID: %v", f.StreamID))
 	cc := rl.cc
 	// Locking both mu and wmu here allows frame encoding to read settings with only wmu held.
 	// Acquiring wmu when f.IsAck() is unnecessary, but convenient and mostly harmless.
@@ -2811,6 +2819,7 @@ func (rl *clientConnReadLoop) processSettingsNoWrite(f *SettingsFrame) error {
 }
 
 func (rl *clientConnReadLoop) processWindowUpdate(f *WindowUpdateFrame) error {
+	defer TimeTrack(time.Now(), fmt.Sprintf("Stream ID: %v", f.StreamID))
 	cc := rl.cc
 	cs := rl.streamByID(f.StreamID)
 	if f.StreamID != 0 && cs == nil {
@@ -2832,6 +2841,7 @@ func (rl *clientConnReadLoop) processWindowUpdate(f *WindowUpdateFrame) error {
 }
 
 func (rl *clientConnReadLoop) processResetStream(f *RSTStreamFrame) error {
+	defer TimeTrack(time.Now(), fmt.Sprintf("Stream ID: %v", f.StreamID))
 	cs := rl.streamByID(f.StreamID)
 	if cs == nil {
 		// TODO: return error if server tries to RST_STREAM an idle stream
@@ -2896,6 +2906,7 @@ func (cc *ClientConn) Ping(ctx context.Context) error {
 }
 
 func (rl *clientConnReadLoop) processPing(f *PingFrame) error {
+	defer TimeTrack(time.Now(), fmt.Sprintf("Stream ID: %v", f.StreamID))
 	var err error
 	if f.IsAck() {
 		cc := rl.cc
@@ -2919,6 +2930,7 @@ func (rl *clientConnReadLoop) processPing(f *PingFrame) error {
 }
 
 func (rl *clientConnReadLoop) processPushPromise(f *PushPromiseFrame) error {
+	defer TimeTrack(time.Now(), fmt.Sprintf("Stream ID: %v", f.StreamID))
 	// We told the peer we don't want them.
 	// Spec says:
 	// "PUSH_PROMISE MUST NOT be sent if the SETTINGS_ENABLE_PUSH

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/gob"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -188,7 +189,9 @@ func (occ *OnvmClientConn) WriteClientPreface() error {
 }
 
 func (occ *OnvmClientConn) WriteRequest(req *http.Request) error {
+	defer TimeTrack(time.Now(), fmt.Sprintf("Local (%v) <-> Remote (%v)", occ.conn.LocalAddr().String(), occ.conn.RemoteAddr().String()))
 	Log.Traceln("nycu-ucr/net/http2/onvm_transport, WriteRequest()")
+	// fmt.Printf("WriteRequest to %+v, URL: %+v\n", occ.conn.RemoteAddr(), req.URL.String())
 	occ.req = req
 	b, err := FastEncodeRequest(req)
 	if err != nil {
@@ -202,33 +205,37 @@ func (occ *OnvmClientConn) WriteRequest(req *http.Request) error {
 
 func (occ *OnvmClientConn) ReadResponse() (*http.Response, error) {
 	Log.Traceln("nycu-ucr/net/http2/onvm_transport, ReadResponse()")
-	buf := make([]byte, 10240)
-	n, err := occ.conn.Read(buf)
-	if err != nil {
-		if err == io.EOF {
-			occ.Close()
-		} else {
-			Log.Errorf("nycu-ucr/net/http2/onvm_transport, ReadResponse()->Read error: %+v", err)
+	// fmt.Printf("ReadResponse from %+v\n", occ.conn.RemoteAddr())
+	time_track_is_set := false
+
+	buf := make([]byte, 0, 32768)
+	for {
+		if len(buf) == cap(buf) {
+			buf = append(buf, 0)[:len(buf)]
 		}
-		return nil, err
+		n, err := occ.conn.Read(buf[len(buf):cap(buf)])
+		buf = buf[:len(buf)+n]
+		if !time_track_is_set {
+			defer TimeTrack(time.Now(), "From read get data")
+			time_track_is_set = true
+		}
+
+		if err != nil {
+			if err == io.EOF {
+				err = nil
+			} else if err.Error() == "Continue" {
+				continue
+			} else {
+				Log.Errorf("nycu-ucr/net/http2/onvm_transport, ReadResponse()->Read error: %+v", err)
+				occ.Close()
+			}
+			return nil, err
+		} else {
+			break
+		}
 	}
-	// Log.Tracef("nycu-ucr/net/http2/onvm_transport, ReadResponse()->Read: %dbytes", n)
-	// resp_wrapper, err := DecodeResponse(buf)
 
-	return occ.makeHttpResponse(buf, n)
-}
-
-func (occ *OnvmClientConn) makeHttpResponse(b []byte, n int) (*http.Response, error) {
-	Log.Traceln("nycu-ucr/net/http2/onvm_transport, makeHttpResponse()")
-	rsp := new(http.Response)
-	rsp.Request = occ.req
-	rsp.Status = ""
-	rsp.Proto = "HTTP/2.0"
-	rsp.ProtoMajor = 2
-	rsp.ProtoMinor = 0
-	rsp.Body = io.NopCloser(bytes.NewBuffer(b[:n]))
-
-	return rsp, nil
+	return FastDecodeResponse(buf)
 }
 
 func (occ *OnvmClientConn) Close() {
@@ -243,6 +250,8 @@ type OnvmTransport struct {
 }
 
 func (ot *OnvmTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	addr := authorityAddr(req.URL.Scheme, req.URL.Host)
+	defer TimeTrack(time.Now(), addr)
 	var err error
 
 	// Get Connection
@@ -263,9 +272,10 @@ func (ot *OnvmTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Read Response
 	rsp, err := occ.ReadResponse()
 	if err != nil {
-		Log.Errorln("nycu-ucr/net/http2/onvm_transport, RoundTrip not success")
+		Log.Errorf("nycu-ucr/net/http2/onvm_transport, RoundTrip not success, Error: %v", err.Error())
 	} else {
 		Log.Traceln("nycu-ucr/net/http2/onvm_transport, RoundTrip success")
+		// fmt.Printf("Response content length: %d (Bytes)\n", rsp.ContentLength)
 	}
 
 	// Put connection back into the pool
@@ -277,6 +287,7 @@ func (ot *OnvmTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 func (ot *OnvmTransport) GetConn(req *http.Request) (*OnvmClientConn, error) {
+	defer TimeTrack(time.Now(), "")
 	addr := authorityAddr(req.URL.Scheme, req.URL.Host)
 	Log.Debugf("authorityAddr: %s", addr)
 	occ, err := ot.connPool().GetClientConn(req, addr)

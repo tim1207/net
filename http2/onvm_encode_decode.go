@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"strings"
 
 	"github.com/nycu-ucr/gonet/http"
 )
@@ -72,15 +73,16 @@ type Response struct {
 */
 
 const (
-	METHOD      = int8(1) // string
-	URL         = int8(2) // string
-	STATUS      = int8(3) // int32
-	PROTO       = int8(4) // string
-	CONTENT_LEN = int8(5) // int64
-	HOST        = int8(6) // string
-	REMOTE_ADDR = int8(7) // string
-	REQUEST_URI = int8(8) // string
-	PAYLOAD     = int8(9) // []byte (must put as the last TLV if exist)
+	METHOD      = int8(1)  // string
+	URL         = int8(2)  // string
+	STATUS      = int8(3)  // int32
+	PROTO       = int8(4)  // string
+	CONTENT_LEN = int8(5)  // int64
+	HOST        = int8(6)  // string
+	REMOTE_ADDR = int8(7)  // string
+	REQUEST_URI = int8(8)  // string
+	PAYLOAD     = int8(9)  // []byte (must put as the last TLV if exist)
+	HEADER      = int8(10) // string
 )
 
 /* Use for convert between request/response and []byte */
@@ -131,6 +133,31 @@ func byteTouint32(b []byte) uint32 {
 	return binary.BigEndian.Uint32(b)
 }
 
+func toHeader(header_string string) http.Header {
+	h := make(http.Header)
+	var k, v string
+	for _, s := range strings.Split(header_string, "\n") {
+		ss := strings.Split(s, "&")
+
+		if len(ss) == 1 {
+			if ss[0] != "" {
+				fmt.Printf("Only key (%v) no value\n", ss[0])
+			} else {
+				// Empty, ignore it
+				continue
+			}
+		} else if len(ss) == 2 {
+			k = ss[0]
+			v = ss[1]
+			h.Set(k, v)
+		} else {
+			fmt.Printf("Unknown header type: %v\n", ss)
+		}
+	}
+
+	return h
+}
+
 func (pdu *OnvmPDU) EncodeTLV(tag int8, data any) error {
 	Log.Traceln("nycu-ucr/net/http2/onvm_encode_decode, EncodeTLV")
 	buf := pdu.Buffer
@@ -161,13 +188,14 @@ func (pdu *OnvmPDU) EncodeTLV(tag int8, data any) error {
 			return err
 		}
 	case []byte:
-		/* When no Body exist, we still fill the payload tag and its length equeal 0, then return with no value */
-		if len(v) == 0 {
-			return nil
-		}
 		if _, err := buf.Write(uint32Tobyte(uint32(len(v)))); err != nil {
 			Log.Errorf("[EncodeTLV]\nValue: %d\nError: %+v\n", v, err)
 			return err
+		}
+		/* When no Body exist, we still fill the payload tag and its length equeal 0, then return with no value */
+		if len(v) == 0 {
+			// println("When no Body exist, we still fill the payload tag and its length equeal 0, then return with no value")
+			return nil
 		}
 	}
 
@@ -239,6 +267,7 @@ func (pdu *OnvmPDU) DecodeTLV() (*TLV, error) {
 		case PAYLOAD:
 			// []byte
 			tlv.Value = bv
+			// Log.Warnf("TLV, tag: %v, length: %v, value: %v", tlv.Tag, tlv.Length, bv)
 		default:
 			//string
 			tlv.Value = string(bv)
@@ -264,11 +293,28 @@ func FastEncodeRequest(req *http.Request) ([]byte, error) {
 		req.Body.Read(pdu.payload)
 	}
 
-	// TODO:
+	// Method
 	err = pdu.EncodeTLV(METHOD, req.Method)
+	if err != nil {
+		Log.Errorf("FastEncodeRequest, encode method: %v", err.Error())
+	}
+	// URL
 	err = pdu.EncodeTLV(URL, req.URL.String())
+	if err != nil {
+		Log.Errorf("FastEncodeRequest, encode url: %v", err.Error())
+	}
+	// Header
+	err = pdu.EncodeTLV(HEADER, req.Header.ToString())
+	if err != nil {
+		Log.Errorf("FastEncodeResponse, encode payload: %v", err.Error())
+	}
+	// Payload
 	err = pdu.EncodeTLV(PAYLOAD, pdu.payload)
+	if err != nil {
+		Log.Errorf("FastEncodeRequest, encode payload: %v", err.Error())
+	}
 	// etc ...
+	// Log.Warnf("FastEncodeRequest, payload length: %v, payload: %v", len(pdu.payload), pdu.payload)
 
 	return pdu.Buffer.Bytes(), err
 }
@@ -276,35 +322,51 @@ func FastEncodeRequest(req *http.Request) ([]byte, error) {
 func FastDecodeRequest(buf []byte) (*http.Request, error) {
 	Log.Traceln("nycu-ucr/net/http2/onvm_encode_decode, FastDecodeRequest")
 	req := new(http.Request)
+	req.Header = make(http.Header)
 	pdu := &OnvmPDU{
 		Buffer: bytes.NewBuffer(buf),
 	}
 
-	// TODO:
-	tlv1, err := pdu.DecodeTLV() // METHOD
+	// Method
+	tlv1, err := pdu.DecodeTLV()
 	req.Method = tlv1.Value.(string)
 	if err != nil {
 		return nil, err
 	}
 
-	tlv2, err := pdu.DecodeTLV() // URL
+	// URL
+	tlv2, err := pdu.DecodeTLV()
+	if err != nil {
+		return nil, err
+	}
 	req.URL, err = url.Parse(tlv2.Value.(string))
 	if err != nil {
 		return nil, err
 	}
 
-	tlv3, err := pdu.DecodeTLV() // PAYLOAD
+	// Header
+	tlv3, err := pdu.DecodeTLV()
+	header_string := tlv3.Value.(string)
 	if err != nil {
 		return nil, err
 	}
-	if tlv3.Length != 0 {
-		req.Body = io.NopCloser(bytes.NewReader(tlv3.Value.([]byte)))
-		req.ContentLength = int64(tlv3.Length)
+
+	req.Header = toHeader(header_string)
+
+	// Payload
+	tlv4, err := pdu.DecodeTLV()
+	if err != nil {
+		return nil, err
+	}
+	if tlv4.Length != 0 {
+		req.Body = io.NopCloser(bytes.NewReader(tlv4.Value.([]byte)))
+		req.ContentLength = int64(tlv4.Length)
 	} else {
 		req.Body = nil
 		req.ContentLength = 0
 	}
 	// etc ...
+	// Log.Warnf("FastDecodeRequest, content lenght: %v, payload length: %v, payload: %v", req.ContentLength, len(tlv4.Value.([]byte)), string(tlv4.Value.([]byte)))
 
 	return req, nil
 }
@@ -313,12 +375,73 @@ func FastDecodeRequest(buf []byte) (*http.Request, error) {
      Methods of http.Response
 *********************************/
 
-func FastEncodeResponse(rsp *http.Response) ([]byte, error) {
+func FastEncodeResponse(sc int32, header http.Header, cl int64, payload []byte) ([]byte, error) {
+	Log.Traceln("nycu-ucr/net/http2/onvm_encode_decode, FastEncodeResponse")
+	var err error
+	pdu := &OnvmPDU{
+		Buffer: new(bytes.Buffer),
+	}
 
-	return nil, nil
+	if cl != 0 {
+		pdu.payload = payload
+	} else {
+		pdu.payload = make([]byte, 0)
+	}
+
+	// Status Code
+	err = pdu.EncodeTLV(STATUS, sc)
+	if err != nil {
+		Log.Errorf("FastEncodeResponse, encode status code: %v", err.Error())
+	}
+	// Header
+	err = pdu.EncodeTLV(HEADER, header.ToString())
+	if err != nil {
+		Log.Errorf("FastEncodeResponse, encode payload: %v", err.Error())
+	}
+	// Payload
+	err = pdu.EncodeTLV(PAYLOAD, pdu.payload)
+	if err != nil {
+		Log.Errorf("FastEncodeResponse, encode payload: %v", err.Error())
+	}
+
+	return pdu.Buffer.Bytes(), err
 }
 
 func FastDecodeResponse(buf []byte) (*http.Response, error) {
+	Log.Traceln("nycu-ucr/net/http2/onvm_encode_decode, FastDecodeResponse")
+	resp := new(http.Response)
+	pdu := &OnvmPDU{
+		Buffer: bytes.NewBuffer(buf),
+	}
 
-	return nil, nil
+	// Status Code
+	tlv1, err := pdu.DecodeTLV()
+	resp.StatusCode = int(tlv1.Value.(uint32))
+	if err != nil {
+		return nil, err
+	}
+
+	// Header
+	tlv2, err := pdu.DecodeTLV()
+	header_string := tlv2.Value.(string)
+	if err != nil {
+		return nil, err
+	}
+	resp.Header = toHeader(header_string)
+
+	// PAYLOAD
+	tlv3, err := pdu.DecodeTLV()
+	if err != nil {
+		return nil, err
+	}
+	if tlv3.Length != 0 {
+		resp.Body = io.NopCloser(bytes.NewReader(tlv3.Value.([]byte)))
+		resp.ContentLength = int64(tlv3.Length)
+		// fmt.Printf("FastDecodeResponse, response content length: %d (Bytes)\n", resp.ContentLength)
+	} else {
+		resp.Body = nil
+		resp.ContentLength = 0
+	}
+
+	return resp, nil
 }

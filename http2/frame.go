@@ -500,6 +500,7 @@ func (fr *Framer) ReadFrame() (Frame, error) {
 	}
 	t1 := time.Now()
 	fh, err := readFrameHeader(fr.headerBuf[:], fr.r)
+	defer TimeTrack(time.Now(), "")
 	if err != nil {
 		return nil, err
 	}

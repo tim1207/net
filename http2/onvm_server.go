@@ -2,9 +2,11 @@ package http2
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"runtime"
+	"time"
 
 	"github.com/nycu-ucr/gonet/http"
 )
@@ -51,6 +53,7 @@ type onvmConn struct {
 }
 
 func (s *Server) ServeOnvmConn(c net.Conn, opts *ServeConnOpts) {
+	defer TimeTrack(time.Now(), fmt.Sprintf("Local (%v) <-> Remote (%v)", c.LocalAddr().String(), c.RemoteAddr().String()))
 	// Log.Tracef("nycu-ucr/net/http2/onvm_server.go/ServeOnvmConn")
 	baseCtx, cancel := serverConnBaseContext(c, opts)
 	defer cancel()
@@ -100,6 +103,7 @@ func (s *Server) ServeOnvmConn(c net.Conn, opts *ServeConnOpts) {
 }
 
 func (oc *onvmConn) serve() {
+	defer TimeTrack(time.Now(), fmt.Sprintf("Local (%v) <-> Remote (%v)", oc.conn.LocalAddr().String(), oc.conn.RemoteAddr().String()))
 	defer oc.conn.Close()
 
 	go oc.readRequest()
@@ -109,6 +113,7 @@ func (oc *onvmConn) serve() {
 		loopNum++
 		select {
 		case req := <-oc.httpRequestCh:
+			req.RemoteAddr = oc.conn.RemoteAddr().String()
 			onvmrw := oc.newOnvmResponseWriter(req)
 			oc.onvmRunHandler(onvmrw, req, oc.handler.ServeHTTP)
 		case <-oc.handlerPanicCh:
@@ -124,16 +129,31 @@ func (oc *onvmConn) serve() {
 }
 
 func (oc *onvmConn) readRequest() {
-	for {
-		buff := make([]byte, 10240)
-		n, err := oc.conn.Read(buff)
+	var n int
+	var err error
 
-		if err != nil {
-			Log.Errorf("nycu-ucr/net/http2/server.go/ServeOnvmConn: net.Conn.Read error -> %+v\n", err)
-			oc.readConnErrCh <- err
-			return
+	for {
+		buff := make([]byte, 0, 32768)
+		for {
+			if len(buff) == cap(buff) {
+				buff = append(buff, 0)[:len(buff)]
+			}
+			n, err = oc.conn.Read(buff[len(buff):cap(buff)])
+			buff = buff[:len(buff)+n]
+
+			if err != nil {
+				if err == io.EOF {
+					err = nil
+				} else if err.Error() == "Continue" {
+					continue
+				} else {
+					Log.Errorf("nycu-ucr/net/http2/server.go/ServeOnvmConn: net.Conn.Read error -> %+v\n", err)
+					oc.readConnErrCh <- err
+				}
+			} else {
+				break
+			}
 		}
-		// Log.Tracef("nycu-ucr/net/http2/server.go/ServeOnvmConn: net.Conn.Read -> %d bytes\n", n)
 
 		if n != 0 {
 			req, err := FastDecodeRequest(buff)
@@ -174,8 +194,11 @@ func (oc *onvmConn) onvmRunHandler(onvmrw *onvmresponseWriter, req *http.Request
 			oc.handlerPanicCh <- struct{}{}
 			return
 		}
-		onvmrw.rws.handlerDone = true
+
+		onvmrw.handlerDone()
 	}()
+	defer TimeTrack(time.Now(), fmt.Sprintf("Local (%v) <-> Remote (%v)", oc.conn.LocalAddr().String(), oc.conn.RemoteAddr().String()))
+
 	handler(onvmrw, req)
 	didPanic = false
 	Log.Traceln("nycu-ucr/net/http2/onvm_server.go/onvmRunHandler [End]\n")
@@ -220,28 +243,60 @@ func (w *onvmresponseWriter) Header() http.Header {
 
 func (w *onvmresponseWriter) WriteHeader(code int) {
 	// Log.Traceln("nycu-ucr/net/http2/server.go, (*onvmresponseWriter).WriteHeader")
+	// println("onvmresponseWriter.WriteHeader")
 	rws := w.rws
 	if rws == nil {
 		panic("WriteHeader called after Handler finished")
 	}
 	rws.status = code
+	rws.wroteHeader = true
 }
 
 func (w *onvmresponseWriter) Write(p []byte) (n int, err error) {
 	// Log.Traceln("nycu-ucr/net/http2/server.go, (*onvmresponseWriter).Write")
 	rws := w.rws
+	// fmt.Printf("WriteResponse to %v, Status: %v, Content Length: %v\n",
+	// 	rws.onvmConn.conn.RemoteAddr(),
+	// 	rws.status,
+	// 	len(p))
 	if rws == nil {
 		panic("Write called after Handler finished")
-	}
-	if !rws.wroteHeader {
-		w.WriteHeader(200)
 	}
 	if !bodyAllowedForStatus(rws.status) {
 		return 0, http.ErrBodyNotAllowed
 	}
 
 	// Log.Tracef("nycu-ucr/net/http2/server.go, (*onvmresponseWriter).Write:\n%s\n", string(p))
-	n, err = rws.onvmConn.conn.Write(p)
+	b, err := FastEncodeResponse(int32(rws.status), w.Header(), int64(len(p)), p)
+	if err != nil {
+		Log.Errorf("nycu-ucr/net/http2/onvm_server, EncodeRepose err: %+v", err)
+		return 0, err
+	}
+	n, err = rws.onvmConn.conn.Write(b)
+	if err != nil {
+		Log.Errorf("nycu-ucr/net/http2/onvm_server, Write err: %+v", err)
+		return 0, err
+	} else {
+		rws.sentHeader = true
+	}
 
-	return n, err
+	return len(p), err
+}
+
+func (w *onvmresponseWriter) handlerDone() {
+	// println("nycu-ucr/net/http2/onvm_server.go, onvmresponseWriter.handlerDone")
+	rws := w.rws
+	rws.handlerDone = true
+	empty := make([]byte, 0)
+
+	if !rws.sentHeader {
+		b, err := FastEncodeResponse(int32(rws.status), w.Header(), 0, empty)
+		if err != nil {
+			Log.Errorf("nycu-ucr/net/http2/onvm_server, handlerDone err: %+v", err)
+		}
+		_, err = rws.onvmConn.conn.Write(b)
+		if err != nil {
+			Log.Errorf("nycu-ucr/net/http2/onvm_server, handlerDone err: %+v", err)
+		}
+	}
 }

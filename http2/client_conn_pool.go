@@ -11,6 +11,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/nycu-ucr/gonet/http"
 )
@@ -53,6 +54,7 @@ type clientConnPool struct {
 }
 
 func (p *clientConnPool) GetClientConn(req *http.Request, addr string) (*ClientConn, error) {
+	defer TimeTrack(time.Now(), "")
 	return p.getClientConn(req, addr, dialOnMiss)
 }
 
