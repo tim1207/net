@@ -245,6 +245,7 @@ func (occ *OnvmClientConn) Close() {
 
 type OnvmTransport struct {
 	UseONVM      bool
+	UseXIO       bool
 	ConnPool     *onvmClientConnPool
 	connPoolOnce sync.Once
 }
@@ -305,6 +306,9 @@ func (ot *OnvmTransport) DialConn(req *http.Request) (*OnvmClientConn, error) {
 	if ot.UseONVM {
 		Log.Infoln("nycu-ucr/net/http2/onvm_transport, use ONVM")
 		conn, err = onvmpoller.DialONVM("onvm", req.Host)
+	} else if ot.UseXIO {
+		Log.Infoln("nycu-ucr/net/http2/onvm_transport, use ONVM-XIO")
+		conn, err = onvmpoller.DialXIO("onvm", req.Host)
 	} else {
 		Log.Infoln("nycu-ucr/net/http2/onvm_transport, use TCP")
 		conn, err = net.Dial("tcp", req.Host)
