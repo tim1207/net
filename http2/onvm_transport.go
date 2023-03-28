@@ -183,19 +183,19 @@ type OnvmClientConn struct {
 }
 
 func (occ *OnvmClientConn) WriteClientPreface() error {
-	Log.Traceln("nycu-ucr/net/http2/onvm_transport, WriteClientPreface()")
+	Log.Traceln("nycu-ucr/net/http2/onvm_transport.go, WriteClientPreface()")
 	_, err := occ.conn.Write(upgradePreface)
 	return err
 }
 
 func (occ *OnvmClientConn) WriteRequest(req *http.Request) error {
 	defer TimeTrack(time.Now(), fmt.Sprintf("Local (%v) <-> Remote (%v)", occ.conn.LocalAddr().String(), occ.conn.RemoteAddr().String()))
-	Log.Traceln("nycu-ucr/net/http2/onvm_transport, WriteRequest()")
-	// fmt.Printf("WriteRequest to %+v, URL: %+v\n", occ.conn.RemoteAddr(), req.URL.String())
+	Log.Traceln("nycu-ucr/net/http2/onvm_transport.go, WriteRequest()")
+
 	occ.req = req
 	b, err := FastEncodeRequest(req)
 	if err != nil {
-		Log.Errorf("nycu-ucr/net/http2/onvm_transport, EncodeRequest err: %+v", err)
+		Log.Errorf("nycu-ucr/net/http2/onvm_transport.go, EncodeRequest err: %+v", err)
 		return err
 	}
 	_, err = occ.conn.Write(b)
@@ -204,7 +204,7 @@ func (occ *OnvmClientConn) WriteRequest(req *http.Request) error {
 }
 
 func (occ *OnvmClientConn) ReadResponse() (*http.Response, error) {
-	Log.Traceln("nycu-ucr/net/http2/onvm_transport, ReadResponse()")
+	Log.Traceln("nycu-ucr/net/http2/onvm_transport.go, ReadResponse()")
 	// fmt.Printf("ReadResponse from %+v\n", occ.conn.RemoteAddr())
 	time_track_is_set := false
 
@@ -223,13 +223,15 @@ func (occ *OnvmClientConn) ReadResponse() (*http.Response, error) {
 		}
 		// Latency test section
 
-		if n == 0 && err == nil {
-			// Payload is read completely
-			break
-		} else if err != nil {
-			Log.Errorf("nycu-ucr/net/http2/onvm_transport, ReadResponse()->Read error: %+v", err)
-			occ.Close()
-			break
+		if err != nil {
+			if err.Error() == "EOP" {
+				// Payload is read completely
+				break
+			} else {
+				Log.Errorf("nycu-ucr/net/http2/onvm_transport.go, ReadResponse()->Read error: %+v", err)
+				occ.Close()
+				break
+			}
 		}
 	}
 
@@ -256,7 +258,7 @@ func (ot *OnvmTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Get Connection
 	occ, err := ot.GetConn(req)
 	if err != nil {
-		Log.Errorf("nycu-ucr/net/http2/onvm_transport, GetConn err: %+v", err)
+		Log.Errorf("nycu-ucr/net/http2/onvm_transport.go, GetConn err: %+v", err)
 		return nil, err
 	}
 	// defer occ.Close() // TODO: Remove it
@@ -264,16 +266,16 @@ func (ot *OnvmTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Send Request
 	err = occ.WriteRequest(req)
 	if err != nil {
-		Log.Errorf("nycu-ucr/net/http2/onvm_transport, WriteRequest err: %+v", err)
+		Log.Errorf("nycu-ucr/net/http2/onvm_transport.go, WriteRequest err: %+v", err)
 		return nil, err
 	}
 
 	// Read Response
 	rsp, err := occ.ReadResponse()
 	if err != nil {
-		Log.Errorf("nycu-ucr/net/http2/onvm_transport, RoundTrip not success, Error: %v", err.Error())
+		Log.Errorf("nycu-ucr/net/http2/onvm_transport.go, RoundTrip not success, Error: %v", err.Error())
 	} else {
-		Log.Traceln("nycu-ucr/net/http2/onvm_transport, RoundTrip success")
+		Log.Traceln("nycu-ucr/net/http2/onvm_transport.go, RoundTrip success")
 		// fmt.Printf("Response content length: %d (Bytes)\n", rsp.ContentLength)
 	}
 
@@ -302,13 +304,13 @@ func (ot *OnvmTransport) DialConn(req *http.Request) (*OnvmClientConn, error) {
 	var conn net.Conn
 	var err error
 	if ot.UseONVM {
-		Log.Infoln("nycu-ucr/net/http2/onvm_transport, use ONVM")
+		Log.Infoln("nycu-ucr/net/http2/onvm_transport.go, use ONVM")
 		conn, err = onvmpoller.DialONVM("onvm", req.Host)
 	} else if ot.UseXIO {
-		Log.Infoln("nycu-ucr/net/http2/onvm_transport, use ONVM-XIO")
+		Log.Infoln("nycu-ucr/net/http2/onvm_transport.go, use ONVM-XIO")
 		conn, err = onvmpoller.DialXIO("onvm", req.Host)
 	} else {
-		Log.Infoln("nycu-ucr/net/http2/onvm_transport, use TCP")
+		Log.Infoln("nycu-ucr/net/http2/onvm_transport.go, use TCP")
 		conn, err = net.Dial("tcp", req.Host)
 	}
 	if err != nil {
@@ -363,7 +365,7 @@ func (p *onvmClientConnPool) GetClientConn(req *http.Request, addr string) (*Onv
 	// Send Client Preface
 	err = occ.WriteClientPreface()
 	if err != nil {
-		Log.Errorf("nycu-ucr/net/http2/onvm_transport, WriteClientPreface err: %+v", err)
+		Log.Errorf("nycu-ucr/net/http2/onvm_transport.go, WriteClientPreface err: %+v", err)
 		return nil, err
 	}
 
@@ -371,6 +373,7 @@ func (p *onvmClientConnPool) GetClientConn(req *http.Request, addr string) (*Onv
 }
 
 func (p *onvmClientConnPool) PutClientConn(occ *OnvmClientConn) error {
+	Log.Traceln("nycu-ucr/net/http2/onvm_transport.go, (*onvmClientConnPool).PutClientConn")
 	occ.state = STATE_IDLE
 	occ.start_idle_time = time.Now()
 	addr := authorityAddr(occ.req.URL.Scheme, occ.req.URL.Host)
@@ -382,6 +385,7 @@ func (p *onvmClientConnPool) PutClientConn(occ *OnvmClientConn) error {
 	p.conns[addr] = append(p.conns[addr], occ)
 	p.mu.Unlock()
 
+	Log.Debugf("nycu-ucr/net/http2/onvm_transport.go, (*onvmClientConnPool).PutClientConn: %+v", p.conns)
 	return nil
 }
 

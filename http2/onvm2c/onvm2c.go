@@ -75,6 +75,7 @@ func extractServer(r *http.Request) *http.Server {
 
 // ServeHTTP implement the h2c support that is enabled by h2c.GetH2CHandler.
 func (s onvmHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	http2.Log.Traceln("nycu-ucr/net/http2/onvm2c.go: onvmHandler.ServeHTTP")
 	defer http2.TimeTrack(time.Now(), "net ServeHTTP")
 	// Handle h2c with prior knowledge (RFC 7540 Section 3.4)
 	if r.Method == "PRI" && len(r.Header) == 0 && r.URL.Path == "*" && r.Proto == "HTTP/2.0" {
@@ -84,6 +85,7 @@ func (s onvmHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		conn, err := initH2CWithPriorKnowledge(w)
 		if err != nil {
+			http2.Log.Errorf("h2c: error h2c with prior knowledge: %v", err)
 			if http2VerboseLogs {
 				log.Printf("h2c: error h2c with prior knowledge: %v", err)
 			}
@@ -129,11 +131,14 @@ func (s onvmHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // of the body, and reforward the client preface on the net.Conn this function
 // creates.
 func initH2CWithPriorKnowledge(w http.ResponseWriter) (net.Conn, error) {
+	http2.Log.Traceln("nycu-ucr/net/http2/onvm2c/onvm2c.go, initH2CWithPriorKnowledge")
+
 	hijacker, ok := w.(http.Hijacker)
 	if !ok {
 		return nil, errors.New("h2c: connection does not support Hijack")
 	}
 	conn, rw, err := hijacker.Hijack()
+	// fmt.Printf("1: rw.Reader.Buffered: %v\n", rw.Reader.Buffered())
 	if err != nil {
 		return nil, err
 	}
@@ -142,6 +147,7 @@ func initH2CWithPriorKnowledge(w http.ResponseWriter) (net.Conn, error) {
 
 	buf := make([]byte, len(expectedBody))
 	n, err := io.ReadFull(rw, buf)
+	// fmt.Printf("2: rw.Reader.Buffered: %v\n", rw.Reader.Buffered())
 	if err != nil {
 		return nil, fmt.Errorf("h2c: error reading client preface: %s", err)
 	}
@@ -203,7 +209,9 @@ func getH2Settings(h http.Header) ([]byte, error) {
 }
 
 func newBufConn(conn net.Conn, rw *bufio.ReadWriter) net.Conn {
-	rw.Flush()
+	http2.Log.Traceln("nycu-ucr/net/http2/onvm2c/onvm2c.go, (*bufConn).newBufConn")
+	err := rw.Flush()
+	http2.Log.Debugf("Error: %+v\tBuffered: %v\n", err, rw.Reader.Buffered())
 	if rw.Reader.Buffered() == 0 {
 		// If there's no buffered data to be read,
 		// we can just discard the bufio.ReadWriter.
@@ -219,6 +227,7 @@ type bufConn struct {
 }
 
 func (c *bufConn) Read(p []byte) (int, error) {
+	http2.Log.Traceln("nycu-ucr/net/http2/onvm2c/onvm2c.go, (*bufConn).Read")
 	if c.Reader == nil {
 		return c.Conn.Read(p)
 	}
@@ -227,12 +236,14 @@ func (c *bufConn) Read(p []byte) (int, error) {
 		c.Reader = nil
 		return c.Conn.Read(p)
 	}
+
 	p2 := make([]byte, cap(p)-n)
-	// if n < len(p) {
-	// 	p = p[:n]
-	// }
-	c.Reader.Read(p)
-	x, err := c.Conn.Read(p2)
+
+	// Retrieve the data in the buffer
+	x, err := c.Reader.Read(p)
+	// Call underly Read
+	x, err = c.Conn.Read(p2)
+	// Combine them
 	copy(p[n:], p2)
 
 	return x + n, err
